@@ -1,0 +1,135 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return getUserData().role;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == 'Salon Owner';
+    }
+    
+    function isCustomer() {
+      return isSignedIn() && getUserRole() == 'Customer';
+    }
+    
+    function isVendor() {
+      return isSignedIn() && getUserRole() == 'Vendor';
+    }
+    
+    function isApproved() {
+      return getUserData().approved == true;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow create: if 
+        isSignedIn() && 
+        request.auth.uid == userId && 
+        request.resource.data.email is string &&
+        request.resource.data.role in ['Customer', 'Vendor'];
+      
+      allow read: if 
+        isSignedIn() && 
+        (request.auth.uid == userId || isAdmin());
+      
+      allow update: if 
+        isSignedIn() && 
+        (request.auth.uid == userId || isAdmin()) &&
+        (request.resource.data.approved == resource.data.approved || isAdmin());
+      
+      allow delete: if isAdmin();
+    }
+    
+    // Salons collection
+    match /salons/{salonId} {
+      allow create: if isAdmin();
+      allow read: if true;
+      allow update, delete: if isAdmin();
+    }
+    
+    // Services collection
+    match /services/{serviceId} {
+      allow create: if isAdmin();
+      allow read: if true;
+      allow update, delete: if isAdmin();
+    }
+    
+    // Bookings collection
+    match /bookings/{bookingId} {
+      allow create: if 
+        isSignedIn() && 
+        isCustomer() && 
+        isApproved() &&
+        request.resource.data.customerId == request.auth.uid;
+      
+      allow read: if 
+        isSignedIn() && 
+        (request.auth.uid == resource.data.customerId || isAdmin());
+      
+      allow update: if 
+        isSignedIn() && 
+        (request.auth.uid == resource.data.customerId || isAdmin());
+      
+      allow delete: if 
+        isSignedIn() && 
+        (request.auth.uid == resource.data.customerId || isAdmin());
+    }
+    
+    // Products collection
+    match /products/{productId} {
+      allow create: if 
+        isSignedIn() && 
+        isVendor() && 
+        isApproved() &&
+        request.resource.data.vendorId == request.auth.uid;
+      
+      allow read: if true;
+      
+      allow update, delete: if 
+        isSignedIn() && 
+        isVendor() && 
+        resource.data.vendorId == request.auth.uid;
+    }
+    
+    // Reviews collection
+    match /reviews/{reviewId} {
+      allow create: if 
+        isSignedIn() && 
+        isCustomer() && 
+        isApproved() &&
+        request.resource.data.userId == request.auth.uid;
+      
+      allow read: if true;
+      
+      allow update, delete: if 
+        isSignedIn() && 
+        (request.auth.uid == resource.data.userId || isAdmin());
+    }
+    
+    // Chat messages collection
+    match /chat_messages/{messageId} {
+      allow create: if 
+        isSignedIn() && 
+        isApproved() &&
+        request.resource.data.senderId == request.auth.uid;
+      
+      allow read: if 
+        isSignedIn() && 
+        isApproved() &&
+        (resource.data.senderId == request.auth.uid || 
+         resource.data.receiverId == request.auth.uid ||
+         isAdmin());
+    }
+  }
+}

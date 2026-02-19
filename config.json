@@ -1,0 +1,20 @@
+{
+    "min_confidence": 0.25,
+    "disappear_frames": 5,
+    "max_history": 50,
+    "grid_size": 8,
+    "trail_length": 10,
+    "camera_index": 0,
+    "frame_width": 640,
+    "frame_height": 480,
+    "common_objects": [
+        "person",
+        "car",
+        "chair",
+        "cell phone",
+        "laptop",
+        "bottle",
+        "cup",
+        "book"
+    ]
+}

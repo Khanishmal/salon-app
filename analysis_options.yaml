@@ -1,0 +1,18 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Prefer const with constant constructors
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    
+    # Style rules
+    use_key_in_widget_constructors: true
+    avoid_print: false # Allow print for debugging
+    prefer_final_fields: true
+    prefer_final_locals: true
+    
+    # Null safety rules
+    always_declare_return_types: true
+    always_use_package_imports: true
+    avoid_init_to_null: true

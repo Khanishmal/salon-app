@@ -1,0 +1,33 @@
+{
+    "detection": {
+        "model": "yolo11n.pt",
+        "confidence": 0.25,
+        "iou": 0.45
+    },
+    "tracking": {
+        "max_age": 30,
+        "min_hits": 3,
+        "iou_threshold": 0.3
+    },
+    "segmentation": {
+        "enabled": false,
+        "model": "unet",
+        "encoder": "resnet34"
+    },
+    "camera": {
+        "index": 0,
+        "width": 640,
+        "height": 480,
+        "fps": 30
+    },
+    "visualization": {
+        "show_trails": true,
+        "trail_length": 20,
+        "show_ids": true,
+        "show_confidences": true
+    },
+    "export": {
+        "format": "csv",
+        "include_masks": false
+    }
+}

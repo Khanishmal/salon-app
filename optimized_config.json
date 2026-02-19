@@ -1,0 +1,23 @@
+{
+    "detection": {
+        "model": "yolo11n.pt",
+        "confidence": 0.35,
+        "iou": 0.45,
+        "size": 320
+    },
+    "tracking": {
+        "max_distance": 100,
+        "max_age": 10,
+        "min_confidence": 0.4
+    },
+    "camera": {
+        "index": 0,
+        "width": 640,
+        "height": 480
+    },
+    "visualization": {
+        "show_trails": false,
+        "trail_length": 15,
+        "show_ids": true
+    }
+}
