@@ -9,6 +9,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
   firebase_storage
   flutter_unity_widget
+  geolocator_windows
   url_launcher_windows
 )
 

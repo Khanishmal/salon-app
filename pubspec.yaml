@@ -1,17 +1,33 @@
-#pubspec.yaml
 name: salon_management_app
 description: "AI-Powered Salon Management System"
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0' # Changed to 3.0.0 for better compatibility
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+  
+  # UI & Animation
   video_player: ^2.8.1
   google_fonts: ^8.0.0
+  carousel_slider: ^5.0.0
+  shimmer: ^3.0.0
+  syncfusion_flutter_calendar: ^32.1.25
+  table_calendar: ^3.0.9
+  animate_do: ^3.3.4
+  flutter_staggered_animations: ^1.1.0
+  glassmorphism: ^3.0.0
+  smooth_page_indicator: ^1.1.0
+  flutter_rating_bar: ^4.0.1
+  cached_network_image: ^3.3.1
+  
+  # Maps & Location
+  google_maps_flutter: ^2.5.3
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
   
   # Firebase
   firebase_core: ^4.4.0
@@ -19,27 +35,25 @@ dependencies:
   cloud_firestore: ^6.1.2
   firebase_storage: ^13.0.6
   firebase_messaging: ^16.1.1
-  firebase_analytics: ^12.1.1
   
+  # AR & Camera
   flutter_unity_widget: ^2022.2.0
-  # UI & Design
-  carousel_slider: ^5.0.0
-  shimmer: ^3.0.0
-  syncfusion_flutter_calendar: ^32.1.25 # Updated to stable version
-  table_calendar: ^3.0.9
   image_picker: ^1.0.4
-  intl: ^0.20.2
+  camera: ^0.10.5
   
   # Payments
   url_launcher: ^6.2.2
   
-  # HTTP & AI
+  # AI & HTTP
   http: ^1.2.1
   image: ^4.1.4
   
   # Utilities
   shared_preferences: ^2.2.2
   provider: ^6.1.1
+  intl: ^0.20.2
+  path_provider: ^2.1.2
+  uuid: ^4.4.0
 
 dev_dependencies:
   flutter_test:
