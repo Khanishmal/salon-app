@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'add_product_screen.dart';
+import 'working_hours_screen.dart';
+import 'unavailable_dates_screen.dart';
+import 'vendor_statistics_screen.dart';
+import 'announcements_screen.dart';
+import 'chat_screen.dart';
 
 class VendorDashboardScreen extends StatefulWidget {
   const VendorDashboardScreen({super.key});
@@ -11,24 +17,46 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: const Text(
           "✨ My Vendor Dashboard",
           style: TextStyle(
-            color: Color(0xFFF2845C),
+            color: Color(0xFF2D3A4B),
             fontWeight: FontWeight.bold,
             fontSize: 22,
           ),
         ),
         backgroundColor: Colors.white,
-        elevation: 0,
+        elevation: 2,
         centerTitle: true,
         actions: [
+          // Chat Button
+          IconButton(
+            icon: const Icon(Icons.chat, color: Color(0xFFF2845C)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    receiverId: 'dummy_admin_123',
+                    receiverName: 'Admin',
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Announcements Button
           IconButton(
             icon: const Icon(Icons.notifications_outlined,
                 color: Color(0xFFF2845C)),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AnnouncementsScreen()),
+              );
+            },
           ),
         ],
       ),
@@ -37,7 +65,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // WELCOME CARD - YEH CHANGE HOGA
+            // WELCOME CARD
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -48,6 +76,13 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF2845C).withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,7 +145,10 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             // PRODUCT SECTION
             const Text(
               "My Products",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2D3A4B)),
             ),
             const SizedBox(height: 15),
             SizedBox(
@@ -124,25 +162,21 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                       'name': 'Matte Lipstick',
                       'price': 'Rs.1,200',
                       'sales': '42 sold',
-                      'color': '#FF69B4',
                     },
                     {
                       'name': 'Foundation',
                       'price': 'Rs.2,500',
                       'sales': '28 sold',
-                      'color': '#F5DEB3',
                     },
                     {
                       'name': 'Eyeliner',
                       'price': 'Rs.800',
                       'sales': '56 sold',
-                      'color': '#000000',
                     },
                     {
                       'name': 'Face Cream',
                       'price': 'Rs.1,800',
                       'sales': '35 sold',
-                      'color': '#87CEEB',
                     },
                   ];
                   return _buildProductCard(products[index]);
@@ -155,13 +189,21 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Add Product form coming soon! ✨'),
-                      backgroundColor: Color(0xFFF2845C),
-                    ),
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AddProductScreen()),
                   );
+
+                  if (result == true) {
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Product added successfully!'),
+                        backgroundColor: Color(0xFFF2845C),
+                      ),
+                    );
+                  }
                 },
                 icon: const Icon(Icons.add),
                 label: const Text(
@@ -180,19 +222,55 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             ),
             const SizedBox(height: 20),
 
+            // STATISTICS BUTTON
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const VendorStatisticsScreen()),
+                  );
+                },
+                icon: const Icon(Icons.bar_chart),
+                label: const Text(
+                  'View Statistics',
+                  style: TextStyle(fontSize: 16),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // AVAILABILITY CARD
             Card(
               elevation: 2,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(15),
                 child: Column(
                   children: [
+                    // Working Hours
                     ListTile(
-                      leading: const Icon(Icons.access_time,
-                          color: Color(0xFFF2845C), size: 30),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFDEEE9),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.access_time,
+                            color: Color(0xFFF2845C), size: 30),
+                      ),
                       title: const Text(
                         "Working Hours",
                         style: TextStyle(
@@ -202,18 +280,26 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                       trailing:
                           const Icon(Icons.edit, color: Color(0xFFF2845C)),
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Edit working hours coming soon!'),
-                            backgroundColor: Color(0xFFF2845C),
-                          ),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => WorkingHoursScreen()),
                         );
                       },
                     ),
                     const Divider(),
+
+                    // Unavailable Dates
                     ListTile(
-                      leading: const Icon(Icons.event_busy,
-                          color: Color(0xFFF2845C), size: 30),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFDEEE9),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.event_busy,
+                            color: Color(0xFFF2845C), size: 30),
+                      ),
                       title: const Text(
                         "Unavailable Dates",
                         style: TextStyle(
@@ -223,12 +309,10 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                       trailing:
                           const Icon(Icons.edit, color: Color(0xFFF2845C)),
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Edit unavailable dates coming soon!'),
-                            backgroundColor: Color(0xFFF2845C),
-                          ),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => UnavailableDatesScreen()),
                         );
                       },
                     ),
@@ -248,7 +332,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: Colors.grey.withOpacity(0.1),
@@ -268,6 +352,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
+                color: Color(0xFF2D3A4B),
               ),
             ),
             Text(
@@ -286,7 +371,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
       margin: const EdgeInsets.only(right: 15),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
@@ -301,10 +386,10 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
         children: [
           Container(
             height: 100,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFDEEE9),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(15),
+            decoration: const BoxDecoration(
+              color: Color(0xFFFDEEE9),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(16),
               ),
             ),
             child: Center(
@@ -325,6 +410,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
+                    color: Color(0xFF2D3A4B),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
