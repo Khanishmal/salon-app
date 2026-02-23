@@ -6,8 +6,7 @@ import 'customer_dashboard.dart';
 import 'vendor_screen.dart';
 import 'signup_screen.dart';
 import 'salon_owner_screen.dart';
-import 'vendor_product_screen.dart';
-
+import 'vendors_modules/vendor_dashboard.dart';
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -64,7 +63,7 @@ class _SignInScreenState extends State<SignInScreen> {
         if (role == 'Salon Owner') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SalonOwnerScreen()));
         } else if (role == 'Vendor') {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VendorProductScreen()));
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VendorDashboardScreen()));
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const CustomerDashboard()));
         }
