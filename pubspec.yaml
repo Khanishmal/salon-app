@@ -1,3 +1,4 @@
+#pubspec.yaml
 name: salon_management_app
 description: "AI-Powered Salon Management System"
 publish_to: 'none'
@@ -26,7 +27,7 @@ dependencies:
   
   # Maps & Location
   google_maps_flutter: ^2.5.3
-  geolocator: ^10.1.0
+  geolocator: ^9.0.2
   geocoding: ^2.1.1
   
   # Firebase
@@ -38,9 +39,12 @@ dependencies:
   fl_chart: ^1.1.1
   
   # AR & Camera
-  flutter_unity_widget: ^2022.2.0
+  #flutter_unity_widget: ^2022.2.0
   image_picker: ^1.0.4
   camera: ^0.10.5
+  vector_math: ^2.1.4
+  
+  # Banuba AR Makeup SDK
   
   # Payments
   url_launcher: ^6.2.2
@@ -55,6 +59,7 @@ dependencies:
   intl: ^0.20.2
   path_provider: ^2.1.2
   uuid: ^4.4.0
+ 
 
 dev_dependencies:
   flutter_test:
@@ -67,3 +72,4 @@ flutter:
   assets:
     - assets/logo_icon.png
     - assets/hero-salon.jpg
+    - lib/banuba_client_token.txt

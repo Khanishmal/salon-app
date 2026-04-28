@@ -1,8 +1,3 @@
-plugins {
-    id 'com.android.application'
-    // Add this line:
-    id 'com.google.gms.google-services'  // ← Add this
-}
 allprojects {
     repositories {
         google()
@@ -27,5 +22,3 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
-// Add this at the very bottom:
-apply plugin: 'com.google.gms.google-services'

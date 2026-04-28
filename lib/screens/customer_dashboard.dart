@@ -13,11 +13,11 @@ import 'customer_modules/booking_calendar.dart';
 import 'customer_modules/service_menu.dart';
 import 'customer_modules/product_shop.dart';
 import 'customer_modules/ai_chat.dart';
-import 'customer_modules/ar_makeup.dart';
 import 'customer_modules/loyalty_screen.dart' hide PhotoUploadScreen;
 import 'customer_modules/photo_upload.dart';
 import 'customer_modules/real_time_chat.dart';
 import 'customer_modules/inbox_screen.dart';
+import 'auto_makeup_screen.dart'; // Added import for AutoMakeupScreen
 
 class CustomerDashboard extends StatefulWidget {
   const CustomerDashboard({super.key});
@@ -40,7 +40,6 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     {'icon': Icons.calendar_today, 'label': 'Book', 'color': 0xFF6C5CE7, 'screen': const BookingCalendarScreen()},
     {'icon': Icons.spa_outlined, 'label': 'Services', 'color': 0xFF00B894, 'screen': const ServiceMenuScreen()},
     {'icon': Icons.shopping_bag_outlined, 'label': 'Shop', 'color': 0xFFE17055, 'screen': const ProductShopScreen()},
-    {'icon': Icons.face_retouching_natural, 'label': 'AR Try-On', 'color': 0xFF0984E3, 'screen': const ARMakeupScreen()},
     {'icon': Icons.camera_alt_outlined, 'label': 'Photos', 'color': 0xFF6C5CE7, 'screen': const PhotoUploadScreen()},
     {'icon': Icons.message_outlined, 'label': 'Chat', 'color': 0xFF00B894, 'screen': const RealTimeChatScreen()},
     {'icon': Icons.card_giftcard, 'label': 'Loyalty', 'color': 0xFFE17055, 'screen': const LoyaltyScreen()},
@@ -268,6 +267,31 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
                       ),
                     ),
                     const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // Navigate to AutoMakeupScreen
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) =>  AutoMakeupScreen()),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0984E3),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        child: const Text("Try Makeup"),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.push(
@@ -671,7 +695,7 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
             ),
           ),
         ],
-      ),
+    ),
     );
   }
 

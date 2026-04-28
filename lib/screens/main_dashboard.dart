@@ -31,39 +31,42 @@ class GlowSalonDashboard extends StatelessWidget {
   }
 
   // --- 1. GLASSMORPHIC APP BAR ---
-  Widget _buildGlassAppBar(BuildContext context) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: AppBar(
-          backgroundColor: Colors.white.withOpacity(0.8),
-          elevation: 0,
-          title: const Text("GlowSalon", 
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
-          actions: [
-            TextButton(onPressed: () {}, child: const Text("Services", style: TextStyle(color: Colors.black))),
-            TextButton(onPressed: () {}, child: const Text("Shop", style: TextStyle(color: Colors.black))),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context, 
-                    MaterialPageRoute(builder: (context) => const SignInScreen())
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF2845C),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text("Sign In", style: TextStyle(color: Colors.white)),
+// Update the _buildGlassAppBar method
+Widget _buildGlassAppBar(BuildContext context) {
+  return ClipRRect(
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      child: AppBar(
+        backgroundColor: Colors.white.withOpacity(0.8),
+        elevation: 0,
+        title: const Text("GlowSalon", 
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
+        actions: [
+          TextButton(onPressed: () {}, child: const Text("Services", style: TextStyle(color: Colors.black))),
+          TextButton(onPressed: () {}, child: const Text("Shop", style: TextStyle(color: Colors.black))),
+          
+        
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const SignInScreen())
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF2845C),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
+              child: const Text("Sign In", style: TextStyle(color: Colors.white)),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   // --- 2. HERO SECTION ---
   Widget _buildHeroSection(BuildContext context) {
