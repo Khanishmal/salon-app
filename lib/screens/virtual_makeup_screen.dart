@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../models/makeup_configuration.dart';
 import '../painters/makeup_painter.dart';
 
 class VirtualMakeupScreen extends StatefulWidget {
@@ -19,63 +23,79 @@ class _VirtualMakeupScreenState extends State<VirtualMakeupScreen> {
   List<Face> _detectedFaces = [];
   bool _isInitialized = false;
 
-  // Customization Layer States
   String _selectedCategory = 'Lipstick';
-  Color _lipstickColor = const Color(0xFFD91A5B);
-  double _lipstickOpacity = 0.5;
-  Color _blushColor = const Color(0xFFFFB6C1);
-  double _blushOpacity = 0.3;
+  int _frameSkipCounter = 0;
 
-  // Professional Bridal Makeup Color Palettes
+  // Image assets preloaded in memory for real-time performance
+  ui.Image? _loadedNath;
+  ui.Image? _loadedTeeka;
+  ui.Image? _loadedMehndi;
+
+  // Global Makeup Configuration State
+  final MakeupConfiguration _currentConfig = MakeupConfiguration(
+    lipstickColor: const Color(0xFFD91A5B),
+    blushColor: const Color(0xFFFFB6C1),
+    eyeshadowColor: const Color(0xFF8C0327),
+    eyelinerColor: const Color(0xFF000000),
+    contourColor: const Color(0xFF5C4033),
+    jewelryColor: const Color(0xFFFFD700), 
+    mehndiColor: const Color(0xFF4A2C00),  
+  );
+
+  // Deep Premium Bridal Palette Selection
   final Map<String, List<Color>> _colorPalettes = {
-    'Lipstick': [
-      Colors.transparent, 
-      const Color(0xFFD91A5B), // Classic Rose
-      const Color(0xFF8C0327), // Crimson Maroon
-      const Color(0xFFE65C7B), // Pastel Pink
-      const Color(0xFF590219), // Deep Burgundy
-    ],
-    'Blush': [
-      Colors.transparent, 
-      const Color(0xFFFFB6C1), // Light Coral
-      const Color(0xFFFA8072), // Salmon Glow
-      const Color(0xFFE9967A), // Peach Blush
-      const Color(0xFFFF69B4), // Hot Pink Tint
-    ],
+    'Lipstick': [Colors.transparent, const Color(0xFFD91A5B), const Color(0xFF8C0327), const Color(0xFFE65C7B), const Color(0xFF590219), const Color(0xFFC71585)],
+    'Blush': [Colors.transparent, const Color(0xFFFFB6C1), const Color(0xFFFA8072), const Color(0xFFE9967A), const Color(0xFFFF69B4)],
+    'Eyeshadow': [Colors.transparent, const Color(0xFF8C0327), const Color(0xFFFFD700), const Color(0xFF4B0082), const Color(0xFF1167B1), const Color(0xFF004B23)],
+    'Eyeliner': [Colors.transparent, const Color(0xFF000000), const Color(0xFF2C3E50), const Color(0xFF1A1A1A)],
+    'Contour': [Colors.transparent, const Color(0xFF5C4033), const Color(0xFF704214), const Color(0xFF3D2314)],
+    'Jewelry': [Colors.transparent, const Color(0xFFFFD700), const Color(0xFFE6C280), const Color(0xFFC0C0C0), const Color(0xFFFFDF73)], 
+    'Mehndi': [Colors.transparent, const Color(0xFF4A2C00), const Color(0xFF6E3A07), const Color(0xFF2B1900), const Color(0xFF5C2C16)],   
   };
 
   @override
   void initState() {
     super.initState();
+    _loadProfessionalAssets();
     _initializePipeline();
   }
 
-  Future<void> _initializePipeline() async {
-    // Safely request hardware layer permissions before camera init
-    final status = await Permission.camera.request();
-    if (status.isDenied) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Camera access is required for AI Try-On.')),
-        );
-      }
-      return;
+  // Decodes transparent PNG assets asynchronously into raw bit buffers before canvas execution
+  Future<void> _loadProfessionalAssets() async {
+    try {
+      _loadedNath = await _loadAssetImage('assets/jewelry/bridal_nath.png');
+      _loadedTeeka = await _loadAssetImage('assets/jewelry/forehead_teeka.png');
+      _loadedMehndi = await _loadAssetImage('assets/mehndi/bridal_bindi.png');
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint("Error loading transparent PNG assets: $e");
     }
+  }
 
-    // Configure the Google ML Kit Face Detector with contours explicitly enabled
+  Future<ui.Image> _loadAssetImage(String assetPath) async {
+    final data = await rootBundle.load(assetPath);
+    final bytes = data.buffer.asUint8List();
+    final Completer<ui.Image> completer = Completer();
+    ui.decodeImageFromList(bytes, (ui.Image img) => completer.complete(img));
+    return completer.future;
+  }
+
+  Future<void> _initializePipeline() async {
+    final status = await Permission.camera.request();
+    if (status.isDenied) return;
+
+    // CRITICAL CORE PIPELINE FIX: Unlocks detailed path contours for advanced makeup overlays
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        enableContours: true,
-        enableLandmarks: true,
+        enableContours: true,     // Unlocks eyebrows, lip details, and upper eyelid limits
+        enableLandmarks: true,    // Unlocks cheeks and nose bridge tracking points
         performanceMode: FaceDetectorMode.fast,
       ),
     );
 
     try {
       final cameras = await availableCameras();
-      final frontCamera = cameras.firstWhere(
-        (cam) => cam.lensDirection == CameraLensDirection.front,
-      );
+      final frontCamera = cameras.firstWhere((cam) => cam.lensDirection == CameraLensDirection.front);
 
       _cameraController = CameraController(
         frontCamera,
@@ -85,37 +105,35 @@ class _VirtualMakeupScreenState extends State<VirtualMakeupScreen> {
       );
 
       await _cameraController!.initialize();
-      
-      // Start real-time image analysis stream processing loops
       await _cameraController!.startImageStream((CameraImage image) {
         _processImageFrame(image, frontCamera);
       });
 
-      setState(() {
-        _isInitialized = true;
-      });
+      setState(() => _isInitialized = true);
     } catch (e) {
-      debugPrint("Camera hardware initialization fault: $e");
+      debugPrint("Camera initialization exception: $e");
     }
   }
 
   void _processImageFrame(CameraImage image, CameraDescription camera) async {
-    // Prevent pipeline backpressure bottlenecks
-    if (_isBusy || _faceDetector == null) return;
+    if (_isBusy) return;
+
+    // Performance Optimization Throttle: Processes every alternate frame to protect hardware resources
+    _frameSkipCounter++;
+    if (_frameSkipCounter % 2 != 0) return;
+
     _isBusy = true;
+    final stopwatch = Stopwatch()..start();
 
     try {
-      // High-performance direct byte accumulation loop 
       final BytesBuilder bytesBuilder = BytesBuilder();
       for (final Plane plane in image.planes) {
         bytesBuilder.add(plane.bytes);
       }
       final Uint8List bytes = bytesBuilder.takeBytes();
 
-      // Explicitly handle ML Kit's rotation mapping requirements 
       final imageRotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation) 
           ?? InputImageRotation.rotation0deg; 
-      
       final inputImageFormat = InputImageFormatValue.fromRawValue(image.format.group.index) 
           ?? InputImageFormat.nv21;
 
@@ -127,19 +145,60 @@ class _VirtualMakeupScreenState extends State<VirtualMakeupScreen> {
       );
 
       final inputImage = InputImage.fromBytes(bytes: bytes, metadata: inputImageData);
-      
       final faces = await _faceDetector.processImage(inputImage);
 
+      stopwatch.stop();
+      debugPrint("AI Core Frame Processing Speed: ${stopwatch.elapsedMilliseconds}ms");
+
       if (mounted) {
-        setState(() {
-          _detectedFaces = faces;
-        });
+        setState(() => _detectedFaces = faces);
       }
     } catch (e) {
-      debugPrint("ML Kit pipeline analysis error: $e");
+      debugPrint("Frame pipeline processing error: $e");
     } finally {
       _isBusy = false;
     }
+  }
+
+  double _getCurrentOpacityValue() {
+    switch (_selectedCategory) {
+      case 'Lipstick': return _currentConfig.lipstickOpacity;
+      case 'Blush': return _currentConfig.blushOpacity;
+      case 'Eyeshadow': return _currentConfig.eyeshadowOpacity;
+      case 'Eyeliner': return _currentConfig.eyelinerOpacity;
+      case 'Contour': return _currentConfig.contourOpacity;
+      case 'Jewelry': return _currentConfig.jewelryOpacity;
+      case 'Mehndi': return _currentConfig.mehndiOpacity;
+      default: return 0.5;
+    }
+  }
+
+  void _updateCurrentOpacityValue(double value) {
+    setState(() {
+      switch (_selectedCategory) {
+        case 'Lipstick': _currentConfig.lipstickOpacity = value; break;
+        case 'Blush': _currentConfig.blushOpacity = value; break;
+        case 'Eyeshadow': _currentConfig.eyeshadowOpacity = value; break;
+        case 'Eyeliner': _currentConfig.eyelinerOpacity = value; break;
+        case 'Contour': _currentConfig.contourOpacity = value; break;
+        case 'Jewelry': _currentConfig.jewelryOpacity = value; break;
+        case 'Mehndi': _currentConfig.mehndiOpacity = value; break;
+      }
+    });
+  }
+
+  void _updateCurrentColorValue(Color color) {
+    setState(() {
+      switch (_selectedCategory) {
+        case 'Lipstick': _currentConfig.lipstickColor = color; break;
+        case 'Blush': _currentConfig.blushColor = color; break;
+        case 'Eyeshadow': _currentConfig.eyeshadowColor = color; break;
+        case 'Eyeliner': _currentConfig.eyelinerColor = color; break;
+        case 'Contour': _currentConfig.contourColor = color; break;
+        case 'Jewelry': _currentConfig.jewelryColor = color; break;
+        case 'Mehndi': _currentConfig.mehndiColor = color; break;
+      }
+    });
   }
 
   @override
@@ -155,9 +214,7 @@ class _VirtualMakeupScreenState extends State<VirtualMakeupScreen> {
     if (!_isInitialized || _cameraController == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFFD91A5B)),
-        ),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFD91A5B))),
       );
     }
 
@@ -165,110 +222,128 @@ class _VirtualMakeupScreenState extends State<VirtualMakeupScreen> {
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text(
-          'Bridal AI Try-On', 
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Bridal AI Makeover Suite', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Stack(
         children: [
-          // 1. Camera Real-time Viewfinder Viewport Layout
-          Positioned.fill(
-            child: CameraPreview(_cameraController!),
-          ),
+          // 1. Live Camera Preview Layer
+          Positioned.fill(child: CameraPreview(_cameraController!)),
           
-          // 2. Custom Paint Layer (Maps ML Kit Contours dynamically onto Canvas)
+          // 2. Real-Time Drawing Overlay Canvas Core Engine
           if (_detectedFaces.isNotEmpty)
             Positioned.fill(
               child: CustomPaint(
                 painter: MakeupPainter(
                   faces: _detectedFaces,
-                  lipstickColor: _lipstickColor,
-                  lipstickOpacity: _lipstickOpacity,
-                  blushColor: _blushColor,
-                  blushOpacity: _blushOpacity,
+                  config: _currentConfig,
                   absoluteImageSize: _cameraController!.value.previewSize!,
                   rotation: _cameraController!.description.sensorOrientation,
+                  nathImage: _loadedNath,
+                  teekaImage: _loadedTeeka,
+                  mehndiImage: _loadedMehndi,
                 ),
               ),
             ),
-            
-          // 3. Choice Options Interface Overlay Control Panel
+
+          // 3. Screen Snap Utility Action Button
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
+            top: kToolbarHeight + 20,
+            right: 20,
+            child: FloatingActionButton(
+              backgroundColor: const Color(0xFFD91A5B),
+              mini: true,
+              child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+              onPressed: () async {
+                try {
+                  final XFile capturedImageFile = await _cameraController!.takePicture();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Look saved successfully! ${capturedImageFile.name}'),
+                        backgroundColor: const Color(0xFF4A2C00),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  debugPrint("Error capturing frame snapshot: $e");
+                }
+              },
+            ),
+          ),
+
+          // 4. Floating User Customization Control Panel Board
+          Positioned(
+            left: 0, right: 0, bottom: 0,
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.85),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24), 
-                  topRight: Radius.circular(24),
-                ),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 30),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Category Selection Chips
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: ['Lipstick', 'Blush'].map((cat) {
-                      final isSelected = _selectedCategory == cat;
-                      return ChoiceChip(
-                        label: Text(
-                          cat, 
-                          style: TextStyle(color: isSelected ? Colors.white : Colors.grey),
-                        ),
-                        selected: isSelected,
-                        selectedColor: const Color(0xFFD91A5B),
-                        backgroundColor: Colors.grey.shade900,
-                        onSelected: (_) => setState(() => _selectedCategory = cat),
-                      );
-                    }).toList(),
+                  // Horizontal Category Choice Filter Bar
+                  SizedBox(
+                    height: 38,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: _colorPalettes.keys.map((cat) {
+                        final isSel = _selectedCategory == cat;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                          child: ChoiceChip(
+                            label: Text(cat, style: TextStyle(color: isSel ? Colors.white : Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                            selected: isSel,
+                            selectedColor: const Color(0xFFD91A5B),
+                            backgroundColor: Colors.grey.shade900,
+                            onSelected: (_) => setState(() => _selectedCategory = cat),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   
-                  // Horizontal Color Palette Swatches Selection Loop
+                  // Color Circle Grid Selection Module Row
                   SizedBox(
-                    height: 50,
+                    height: 46,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: _colorPalettes[_selectedCategory]!.length,
                       itemBuilder: (context, idx) {
                         final color = _colorPalettes[_selectedCategory]![idx];
-                        final isCurrentColor = _selectedCategory == 'Lipstick' 
-                            ? _lipstickColor == color 
-                            : _blushColor == color;
+                        
+                        bool isActive = false;
+                        switch (_selectedCategory) {
+                          case 'Lipstick': isActive = _currentConfig.lipstickColor == color; break;
+                          case 'Blush': isActive = _currentConfig.blushColor == color; break;
+                          case 'Eyeshadow': isActive = _currentConfig.eyeshadowColor == color; break;
+                          case 'Eyeliner': isActive = _currentConfig.eyelinerColor == color; break;
+                          case 'Contour': isActive = _currentConfig.contourColor == color; break;
+                          case 'Jewelry': isActive = _currentConfig.jewelryColor == color; break;
+                          case 'Mehndi': isActive = _currentConfig.mehndiColor == color; break;
+                        }
 
                         return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (_selectedCategory == 'Lipstick') _lipstickColor = color;
-                              if (_selectedCategory == 'Blush') _blushColor = color;
-                            });
-                          },
+                          onTap: () => _updateCurrentColorValue(color),
                           child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 10),
-                            width: 48,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            width: 44,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: color == Colors.transparent ? Colors.grey.shade800 : color,
                               border: Border.all(
-                                color: isCurrentColor ? const Color(0xFFD91A5B) : Colors.white, 
-                                width: isCurrentColor ? 3 : 1.5,
+                                color: isActive ? const Color(0xFFD91A5B) : Colors.white, 
+                                width: isActive ? 3.5 : 1.5
                               ),
                             ),
-                            child: color == Colors.transparent
-                                ? const Icon(Icons.block, color: Colors.white54, size: 22)
-                                : null,
+                            child: color == Colors.transparent ? const Icon(Icons.block, color: Colors.white30, size: 18) : null,
                           ),
                         );
                       },
@@ -276,27 +351,17 @@ class _VirtualMakeupScreenState extends State<VirtualMakeupScreen> {
                   ),
                   const SizedBox(height: 20),
                   
-                  // Alpha Layer Opacity Blend Slider Control
+                  // Alpha Opacity Slider Field
                   Row(
                     children: [
-                      const Icon(Icons.opacity, color: Colors.white70),
-                      const SizedBox(width: 10),
+                      const Icon(Icons.blur_on, color: Colors.white70, size: 20),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Slider(
-                          value: _selectedCategory == 'Lipstick' ? _lipstickOpacity : _blushOpacity,
-                          min: 0.0,
-                          max: 1.0,
+                          value: _getCurrentOpacityValue(),
                           activeColor: const Color(0xFFD91A5B),
                           inactiveColor: Colors.grey.shade800,
-                          onChanged: (val) {
-                            setState(() {
-                              if (_selectedCategory == 'Lipstick') {
-                                _lipstickOpacity = val;
-                              } else {
-                                _blushOpacity = val;
-                              }
-                            });
-                          },
+                          onChanged: (val) => _updateCurrentOpacityValue(val),
                         ),
                       ),
                     ],
