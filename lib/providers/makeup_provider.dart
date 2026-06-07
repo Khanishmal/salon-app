@@ -1,56 +1,74 @@
+// lib/providers/makeup_provider.dart
 import 'package:flutter/material.dart';
 import '../models/makeup_configuration.dart';
 
-class MakeupProvider extends ChangeNotifier {
-  // Master application configuration state
-  final MakeupConfiguration _config = MakeupConfiguration(
-    lipstickColor: const Color(0xFFD91A5B),
-    blushColor: const Color(0xFFFFB6C1),
-    eyeshadowColor: const Color(0xFF8C0327),
-    eyelinerColor: const Color(0xFF000000),
-    contourColor: const Color(0xFF5C4033),
-    jewelryColor: const Color(0xFFFFD700),
-    mehndiColor: const Color(0xFF4A2C00),
-  );
+class MakeupProvider with ChangeNotifier {
+  final MakeupConfiguration _config = MakeupConfiguration();
 
   MakeupConfiguration get config => _config;
 
-  // Global modifiers that trigger UI redraw pipelines automatically
-  void updateColor(String category, Color color) {
+  // Update specific color selections cleanly
+  void updateColors({
+    Color? lipstick,
+    Color? eyeshadow,
+    Color? eyeliner,
+    Color? blush,
+    Color? foundation,
+    Color? contour,
+    Color? jewelry, // FIX: Recognized parameter
+    Color? mehndi,  // FIX: Recognized parameter
+  }) {
+    if (lipstick != null) _config.lipstickColor = lipstick;
+    if (eyeshadow != null) _config.eyeshadowColor = eyeshadow;
+    if (eyeliner != null) _config.eyelinerColor = eyeliner;
+    if (blush != null) _config.blushColor = blush;
+    if (foundation != null) _config.foundationColor = foundation;
+    if (contour != null) _config.contourColor = contour;
+    if (jewelry != null) _config.jewelryColor = jewelry;   // FIX: Valid setter
+    if (mehndi != null) _config.mehndiColor = mehndi;       // FIX: Valid setter
+    notifyListeners();
+  }
+
+  // Handle fine-grained layer opacity adjustments
+  void updateOpacity(String category, double value) {
     switch (category) {
-      case 'Lipstick': _config.lipstickColor = color; break;
-      case 'Blush': _config.blushColor = color; break;
-      case 'Eyeshadow': _config.eyeshadowColor = color; break;
-      case 'Eyeliner': _config.eyelinerColor = color; break;
-      case 'Contour': _config.contourColor = color; break;
-      case 'Jewelry': _config.jewelryColor = color; break;
-      case 'Mehndi': _config.mehndiColor = color; break;
+      case 'Lipstick': _config.lipstickOpacity = value; break;
+      case 'Eyeshadow': _config.eyeshadowOpacity = value; break;
+      case 'Eyeliner': _config.eyelinerOpacity = value; break;
+      case 'Blush': _config.blushOpacity = value; break;
+      case 'Foundation': _config.foundationOpacity = value; break;
+      case 'Contour': _config.contourOpacity = value; break;
+      case 'Jewelry': _config.jewelryOpacity = value; break; // FIX: Valid setter
+      case 'Mehndi': _config.mehndiOpacity = value; break;   // FIX: Valid setter
     }
     notifyListeners();
   }
 
-  void updateOpacity(String category, double opacity) {
+  // Toggle active rendering visibility overlays
+  void toggleLayer(String category, bool enabled) {
     switch (category) {
-      case 'Lipstick': _config.lipstickOpacity = opacity; break;
-      case 'Blush': _config.blushOpacity = opacity; break;
-      case 'Eyeshadow': _config.eyeshadowOpacity = opacity; break;
-      case 'Eyeliner': _config.eyelinerOpacity = opacity; break;
-      case 'Contour': _config.contourOpacity = opacity; break;
-      case 'Jewelry': _config.jewelryOpacity = opacity; break;
-      case 'Mehndi': _config.mehndiOpacity = opacity; break;
+      case 'Lipstick': _config.lipstickEnabled = enabled; break;
+      case 'Eyeshadow': _config.eyeshadowEnabled = enabled; break;
+      case 'Eyeliner': _config.eyelinerEnabled = enabled; break;
+      case 'Blush': _config.blushEnabled = enabled; break;
+      case 'Foundation': _config.foundationEnabled = enabled; break;
+      case 'Contour': _config.contourEnabled = enabled; break;
+      case 'Jewelry': _config.jewelryEnabled = enabled; break;
+      case 'Mehndi': _config.mehndiEnabled = enabled; break;
     }
     notifyListeners();
   }
 
-  // Resets profile selections back to clean defaults
-  void clearMakeover() {
-    _config.lipstickColor = Colors.transparent;
-    _config.blushColor = Colors.transparent;
-    _config.eyeshadowColor = Colors.transparent;
-    _config.eyelinerColor = Colors.transparent;
-    _config.contourColor = Colors.transparent;
-    _config.jewelryColor = Colors.transparent;
-    _config.mehndiColor = Colors.transparent;
+  // Reset matrix back to clear transparent defaults
+  void resetConfiguration() {
+    _config.lipstickColor = Colors.transparent; _config.lipstickEnabled = false;
+    _config.eyeshadowColor = Colors.transparent; _config.eyeshadowEnabled = false;
+    _config.eyelinerColor = Colors.transparent; _config.eyelinerEnabled = false;
+    _config.blushColor = Colors.transparent; _config.blushEnabled = false;
+    _config.foundationColor = Colors.transparent; _config.foundationEnabled = false;
+    _config.contourColor = Colors.transparent; _config.contourEnabled = false;
+    _config.jewelryColor = Colors.transparent; _config.jewelryEnabled = false;
+    _config.mehndiColor = Colors.transparent; _config.mehndiEnabled = false;
     notifyListeners();
   }
 }

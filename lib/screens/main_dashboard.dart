@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'signin_screen.dart'; 
-import 'vendor_screen.dart'; 
+import 'vendor/vendor_screen.dart'; 
 
 class GlowSalonDashboard extends StatelessWidget {
   const GlowSalonDashboard({super.key});

@@ -2,11 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'customer_dashboard.dart';
-import 'vendor_screen.dart';
+import 'customer/customer_dashboard.dart';
+import 'vendor/vendor_screen.dart';
 import 'signup_screen.dart';
 import 'salon_owner_screen.dart';
-import 'vendors_modules/vendor_dashboard.dart';
+import 'vendor/vendor_dashboard.dart';
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
