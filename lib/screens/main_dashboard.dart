@@ -1,8 +1,9 @@
-//main_dashboard.dart
+// lib/screens/main_dashboard.dart
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'signin_screen.dart'; 
 import 'vendor/vendor_screen.dart'; 
+import 'customer/virtual_makeup_screen.dart'; // Ensure this matches your project directory path
 
 class GlowSalonDashboard extends StatelessWidget {
   const GlowSalonDashboard({super.key});
@@ -10,68 +11,86 @@ class GlowSalonDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFBFBFD), // Premium clean light layout canvas
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(70),
+        preferredSize: const Size.fromHeight(75),
         child: _buildGlassAppBar(context),
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
             _buildHeroSection(context),      
-            _buildServicesSection(),         
+            _buildServicesSection(context),         
             _buildPromoBanner(context),
             _buildFooterSection(context),
           ],
         ),
       ),
-      // AI Advisor FAB matching the design in image_32e7fe.png
       floatingActionButton: _buildChatButton(context),
     );
   }
 
   // --- 1. GLASSMORPHIC APP BAR ---
-// Update the _buildGlassAppBar method
-Widget _buildGlassAppBar(BuildContext context) {
-  return ClipRRect(
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-      child: AppBar(
-        backgroundColor: Colors.white.withOpacity(0.8),
-        elevation: 0,
-        title: const Text("GlowSalon", 
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24)),
-        actions: [
-          TextButton(onPressed: () {}, child: const Text("Services", style: TextStyle(color: Colors.black))),
-          TextButton(onPressed: () {}, child: const Text("Shop", style: TextStyle(color: Colors.black))),
-          
-        
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (context) => const SignInScreen())
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF2845C),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text("Sign In", style: TextStyle(color: Colors.white)),
+  Widget _buildGlassAppBar(BuildContext context) {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16), // Premium high blur definition
+        child: AppBar(
+          backgroundColor: Colors.white.withOpacity(0.65),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: false,
+          title: const Text(
+            "GlowSalon", 
+            style: TextStyle(
+              color: Color(0xFF1D1D1F), 
+              fontWeight: FontWeight.bold, 
+              fontSize: 24,
+              letterSpacing: -0.5,
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () {}, 
+              child: const Text("Services", style: TextStyle(color: Color(0xFF424245), fontWeight: FontWeight.w500)),
+            ),
+            TextButton(
+              onPressed: () {}, 
+              child: const Text("Shop", style: TextStyle(color: Color(0xFF424245), fontWeight: FontWeight.w500)),
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const SignInScreen())
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF2845C),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text("Sign In", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // --- 2. HERO SECTION ---
   Widget _buildHeroSection(BuildContext context) {
     return Container(
-      height: 600,
+      height: 650,
       width: double.infinity,
       decoration: const BoxDecoration(
         image: DecorationImage(
@@ -80,38 +99,82 @@ Widget _buildGlassAppBar(BuildContext context) {
         ),
       ),
       child: Container(
-        color: Colors.black.withOpacity(0.25), 
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withOpacity(0.45),
+              Colors.black.withOpacity(0.2),
+              Colors.black.withOpacity(0.6),
+            ],
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text("Discover Your Perfect Glow",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 48, color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Serif')),
-            const SizedBox(height: 20),
-            const Text("Experience luxury beauty services with AI-powered recommendations.",
-                textAlign: TextAlign.center, 
-                style: TextStyle(fontSize: 18, color: Colors.white)),
-            const SizedBox(height: 30),
+            const SizedBox(height: 60),
+            const Text(
+              "Discover Your\nPerfect Glow",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 44, 
+                color: Colors.white, 
+                fontWeight: FontWeight.bold, 
+                height: 1.2,
+                letterSpacing: -1.0,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Experience luxury beauty services with AI-powered recommendations.",
+              textAlign: TextAlign.center, 
+              style: TextStyle(
+                fontSize: 16, 
+                color: Colors.white.withOpacity(0.9),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: 36),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF2845C),
-                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+                Expanded(
+                  child: Container(
+                    // FIXED: Implemented correct layout constraints using BoxConstraints instead of an invalid parameter
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    margin: const EdgeInsets.only(right: 8),
+                    child: ElevatedButton(
+                      onPressed: () {},
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF2845C),
+                        foregroundColor: Colors.white,
+                        elevation: 4,
+                        shadowColor: const Color(0xFFF2845C).withOpacity(0.3),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text("Book Now", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
                   ),
-                  child: const Text("Book Appointment", style: TextStyle(color: Colors.white)),
                 ),
-                const SizedBox(width: 15),
-                OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white),
-                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20)
+                Expanded(
+                  child: Container(
+                    // FIXED: Implemented correct layout constraints using BoxConstraints instead of an invalid parameter
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    margin: const EdgeInsets.only(left: 8),
+                    child: OutlinedButton(
+                      onPressed: () {},
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.white, width: 1.5),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text("Explore Studio", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
                   ),
-                  child: const Text("Explore Services", style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -122,7 +185,7 @@ Widget _buildGlassAppBar(BuildContext context) {
   }
 
   // --- 3. SERVICES GRID ---
-  Widget _buildServicesSection() {
+  Widget _buildServicesSection(BuildContext context) {
     final services = [
       {'icon': Icons.content_cut, 'title': 'Hair Styling'},
       {'icon': Icons.favorite_border, 'title': 'Makeup'},
@@ -134,38 +197,86 @@ Widget _buildGlassAppBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 60.0, horizontal: 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Text("Our Services", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 40),
+          const Text(
+            "Our Luxury Services", 
+            style: TextStyle(
+              fontSize: 28, 
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1D1D1F),
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: 50,
+            height: 3,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF2845C),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 36),
           Wrap(
-            spacing: 20,
-            runSpacing: 20,
+            spacing: 16,
+            runSpacing: 16,
             alignment: WrapAlignment.center,
-            children: services.map((s) => _buildServiceCard(s['icon'] as IconData, s['title'] as String)).toList(),
+            children: services.map((s) => _buildServiceCard(context, s['icon'] as IconData, s['title'] as String)).toList(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildServiceCard(IconData icon, String title) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(25),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            backgroundColor: const Color(0xFFFDEEE9),
-            child: Icon(icon, color: const Color(0xFFF2845C)),
+  Widget _buildServiceCard(BuildContext context, IconData icon, String title) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      shadowColor: Colors.black.withOpacity(0.04),
+      elevation: 10,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () {
+          if (title == 'Makeup') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const VirtualMakeupScreen()),
+            );
+          }
+        },
+        child: Container(
+          width: 155,
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFF2F2F7), width: 1),
           ),
-          const SizedBox(height: 15),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFDF0EC),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: const Color(0xFFF2845C), size: 24),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title, 
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600, 
+                  fontSize: 15,
+                  color: Color(0xFF1D1D1F),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -173,25 +284,52 @@ Widget _buildGlassAppBar(BuildContext context) {
   // --- 4. PROMO BANNER ---
   Widget _buildPromoBanner(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(20),
-      padding: const EdgeInsets.all(60),
+      margin: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
       width: double.infinity,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFFFBC280), Color(0xFFF2845C)]),
-        borderRadius: BorderRadius.circular(30),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFCAE82), Color(0xFFF2845C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF2845C).withOpacity(0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          const Text("Ready to Glow?", style: TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 30),
+          const Text(
+            "Ready to Glow?", 
+            style: TextStyle(
+              fontSize: 32, 
+              color: Colors.white, 
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Book an appointment online or consult with our real-time AI advisor instantly.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
+          ),
+          const SizedBox(height: 28),
           ElevatedButton(
             onPressed: () {},
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white, 
               foregroundColor: const Color(0xFFF2845C),
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text("Book Now", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text("Book Now", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           ),
         ],
       ),
@@ -201,30 +339,41 @@ Widget _buildGlassAppBar(BuildContext context) {
   // --- 5. FOOTER ---
   Widget _buildFooterSection(BuildContext context) {
     return Container(
-      color: const Color(0xFF1A1A1A),
-      padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 40),
+      color: const Color(0xFF121214), 
+      padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 40),
       child: Column(
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("GlowSalon", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 15),
-                    Text("Your luxury destination for beauty.", style: TextStyle(color: Colors.grey)),
+                    const Text(
+                      "GlowSalon", 
+                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      "Your premium luxury destination for automated beauty operations and personalized cosmetics.", 
+                      style: TextStyle(color: const Color(0xFF8E8E93), fontSize: 14, height: 1.4),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 40),
+              const SizedBox(width: 32),
               _footerColumn(context, "Quick Links", ["About Us", "Contact", "Become a Vendor"]),
             ],
           ),
-          const Divider(color: Colors.white10, height: 60),
-          const Text("© 2026 GlowSalon. All rights reserved.", style: TextStyle(color: Colors.white24)),
+          const SizedBox(height: 48),
+          Container(width: double.infinity, height: 1, color: Colors.white.withOpacity(0.06)),
+          const SizedBox(height: 24),
+          const Text(
+            "© 2026 GlowSalon. All rights reserved.", 
+            style: TextStyle(color: Color(0xFF48484A), fontSize: 12, fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     );
@@ -234,8 +383,8 @@ Widget _buildGlassAppBar(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 15),
+        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 16),
         ...items.map((item) => GestureDetector(
           onTap: () {
             if (item == "Become a Vendor") {
@@ -243,8 +392,11 @@ Widget _buildGlassAppBar(BuildContext context) {
             }
           },
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Text(item, style: const TextStyle(color: Colors.grey)),
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Text(
+              item, 
+              style: const TextStyle(color: Color(0xFFAEAEB2), fontSize: 14, fontWeight: FontWeight.w400),
+            ),
           ),
         )),
       ],
@@ -254,10 +406,13 @@ Widget _buildGlassAppBar(BuildContext context) {
   Widget _buildChatButton(BuildContext context) {
     return FloatingActionButton(
       backgroundColor: const Color(0xFFF2845C),
+      foregroundColor: Colors.white,
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onPressed: () {
-        // Here you would show the Beauty Advisor overlay from image_32e7fe.png
+        // Overlay logic for consultation goes here
       }, 
-      child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+      child: const Icon(Icons.chat_bubble_outline_rounded, size: 24),
     );
   }
 }

@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/signin_screen.dart';
 import 'providers/makeup_provider.dart';
+import 'screens/main_dashboard.dart';
 
 void main() async {
+  // Ensure framework bindings are fully ready
   WidgetsFlutterBinding.ensureInitialized();
   
   // Firebase Initialization
@@ -30,11 +32,20 @@ class GlowSalonApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'GlowSalon',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFF2845C)),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFFF2845C),
+            brightness: Brightness.light,
+          ),
           useMaterial3: true,
           fontFamily: 'Poppins',
+          // Explicit global configuration for uniform premium text sets
+          textTheme: const TextTheme(
+            displayLarge: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold),
+            titleLarge: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600),
+            bodyLarge: TextStyle(fontFamily: 'Poppins'),
+          ),
         ),
-        home: const SignInScreen(),
+        home: const GlowSalonDashboard(),
       ),
     );
   }

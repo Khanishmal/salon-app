@@ -13,11 +13,11 @@ class SalonOwnerScreen extends StatefulWidget {
 
 class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
   int _activeTab = 0;
+  bool _isDarkMode = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  String _selectedUserType = 'All';
-  
-  // For messaging
+
+  // Controllers for messaging and announcements
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _announcementController = TextEditingController();
 
@@ -39,786 +39,469 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     super.dispose();
   }
 
+  // Define Theme Colors Dynamically
+  Color get _bgColor => _isDarkMode ? const Color(0xFF0D0D0D) : const Color(0xFFFAF9F6);
+  Color get _cardColor => _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white;
+  Color get _primaryTextColor => _isDarkMode ? Colors.white : const Color(0xFF1A1A1A);
+  Color get _secondaryTextColor => _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
+  Color get _borderColor => _isDarkMode ? const Color(0xFF2D2D2D) : const Color(0xFFEAE6DF);
+  Color get _accentColor => const Color(0xFFE28766); // Premium Rose/Copper Gold
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: Row(
-        children: [
-          _buildAdminSidebar(),
-          Expanded(
-            child: Column(
-              children: [
-                _buildTopBar(),
-                Expanded(
-                  child: _buildTabContent(),
-                ),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isMobile = constraints.maxWidth < 800;
+
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            // Instantly returns to Dashboard Overview if on any other sub-tab
+            if (_activeTab != 0) {
+              setState(() => _activeTab = 0);
+            } else {
+              _showLogoutConfirmation();
+            }
+          },
+          child: Scaffold(
+            backgroundColor: _bgColor,
+            drawer: isMobile
+                ? Drawer(
+                    backgroundColor: const Color(0xFF141414),
+                    child: _buildAdminSidebar(isMobile: true),
+                  )
+                : null,
+            body: SafeArea(
+              child: Row(
+                children: [
+                  if (!isMobile) _buildAdminSidebar(isMobile: false),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildTopBar(showMenuButton: isMobile),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            child: Container(
+                              key: ValueKey<int>(_activeTab + (_isDarkMode ? 100 : 0)),
+                              child: _buildTabContent(isMobile: isMobile),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            floatingActionButton: FloatingActionButton(
+              onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
+              backgroundColor: _accentColor,
+              mini: true,
+              child: Icon(
+                _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                color: Colors.white,
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // --- SIDEBAR WITH ALL ADMIN OPTIONS ---
-  Widget _buildAdminSidebar() {
+  // --- PREMIUM RESPONSIVE SIDEBAR ---
+  Widget _buildAdminSidebar({required bool isMobile}) {
     return Container(
       width: 280,
-      color: const Color(0xFF121212),
+      color: const Color(0xFF141414),
       child: Column(
         children: [
-          const SizedBox(height: 50),
-          const Text(
-            "GLOW ADMIN",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-            ),
-          ),
-          const SizedBox(height: 40),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _adminNavItem(0, Icons.dashboard_rounded, "Dashboard Overview"),
-                  _adminNavItem(1, Icons.people_rounded, "User Management"),
-                  _adminNavItem(2, Icons.store_rounded, "Vendors"),
-                  _adminNavItem(3, Icons.person_rounded, "Customers"),
-                  _adminNavItem(4, Icons.pending_actions_rounded, "Pending Approvals"),
-                  _adminNavItem(5, Icons.message_rounded, "Messages"),
-                  _adminNavItem(6, Icons.campaign_rounded, "Announcements"),
-                  _adminNavItem(7, Icons.analytics_rounded, "Analytics"),
-                  _adminNavItem(8, Icons.settings_rounded, "Settings"),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Colors.white24, width: 1),
-              ),
-            ),
-            child: _adminNavItem(9, Icons.logout, "Exit Admin", isLogout: true),
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _adminNavItem(int index, IconData icon, String label, {bool isLogout = false}) {
-    bool selected = _activeTab == index;
-    return Container(
-      color: selected ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
-      child: ListTile(
-        onTap: isLogout ? _signOut : () => setState(() => _activeTab = index),
-        leading: Icon(
-          icon,
-          color: selected ? const Color(0xFFF2845C) : Colors.grey[600],
-          size: 24,
-        ),
-        title: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.grey[600],
-            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 15,
-          ),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 30, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  // --- TOP BAR WITH SEARCH AND NOTIFICATIONS ---
-  Widget _buildTopBar() {
-    return Container(
-      height: 90,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F3F4),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: "Search users, vendors, or customers...",
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFFF2845C)),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 25),
-          
-          // Pending Approvals Badge
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('pending_approvals')
-                .where('status', isEqualTo: 'pending')
-                .snapshots(),
-            builder: (context, snapshot) {
-              int count = 0;
-              if (snapshot.hasData && snapshot.data != null) {
-                // Filter to only show vendor applications (not customers)
-                var docs = snapshot.data!.docs.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  return data['type'] == 'vendor' || data['role'] == 'Vendor';
-                }).toList();
-                count = docs.length;
-              }
-              
-              return GestureDetector(
-                onTap: () => setState(() => _activeTab = 4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: count > 0 ? Colors.orange.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.pending_actions,
-                        color: count > 0 ? Colors.orange : Colors.grey,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        "$count Pending",
-                        style: TextStyle(
-                          color: count > 0 ? Colors.orange : Colors.grey,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: 15),
-          
-          // Unread Messages Badge
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('admin_messages')
-                .where('read', isEqualTo: false)
-                .snapshots(),
-            builder: (context, snapshot) {
-              int unread = snapshot.hasData ? snapshot.data!.docs.length : 0;
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.message_outlined, size: 28),
-                    onPressed: () => setState(() => _activeTab = 5),
-                  ),
-                  if (unread > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          unread.toString(),
-                          style: const TextStyle(color: Colors.white, fontSize: 10),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(width: 20),
-          
-          // Admin Profile
-          StreamBuilder<User?>(
-            stream: FirebaseAuth.instance.authStateChanges(),
-            builder: (context, snapshot) {
-              String email = snapshot.data?.email ?? 'Admin';
-              String initial = email.isNotEmpty ? email[0].toUpperCase() : 'A';
-              return CircleAvatar(
-                radius: 22,
-                backgroundColor: const Color(0xFFF2845C),
-                child: Text(
-                  initial,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- TAB CONTENT BASED ON SELECTION ---
-  Widget _buildTabContent() {
-    switch (_activeTab) {
-      case 0:
-        return _buildDashboardOverview();
-      case 1:
-        return _buildUserManagement('All');
-      case 2:
-        return _buildUserManagement('Vendor');
-      case 3:
-        return _buildUserManagement('Customer');
-      case 4:
-        return _buildPendingApprovals();
-      case 5:
-        return _buildMessagingCenter();
-      case 6:
-        return _buildAnnouncements();
-      case 7:
-        return _buildAnalytics();
-      case 8:
-        return _buildSettings();
-      default:
-        return _buildDashboardOverview();
-    }
-  }
-
-  // --- 1. DASHBOARD OVERVIEW WITH FIXED STATS (EXCLUDING SALON OWNER) ---
-  Widget _buildDashboardOverview() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Dashboard Overview",
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-          ),
           const SizedBox(height: 32),
-          
-          // Stats Cards with Proper Filtering
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .where('role', whereIn: ['Customer', 'Vendor'])
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int total = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                    return _statCard(
-                      "Total Users",
-                      total.toString(),
-                      Icons.people,
-                      Colors.blue,
-                      () => setState(() => _activeTab = 1),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .where('role', isEqualTo: 'Vendor')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int total = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                    return _statCard(
-                      "Vendors",
-                      total.toString(),
-                      Icons.store,
-                      Colors.green,
-                      () => setState(() => _activeTab = 2),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .where('role', isEqualTo: 'Customer')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int total = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                    return _statCard(
-                      "Customers",
-                      total.toString(),
-                      Icons.person,
-                      Colors.purple,
-                      () => setState(() => _activeTab = 3),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('pending_approvals')
-                      .where('status', isEqualTo: 'pending')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int pending = 0;
-                    if (snapshot.hasData && snapshot.data != null) {
-                      // Only count vendor applications
-                      pending = snapshot.data!.docs.where((doc) {
-                        var data = doc.data() as Map<String, dynamic>;
-                        return data['type'] == 'vendor' || data['role'] == 'Vendor';
-                      }).length;
-                    }
-                    return _statCard(
-                      "Pending",
-                      pending.toString(),
-                      Icons.pending_actions,
-                      Colors.orange,
-                      () => setState(() => _activeTab = 4),
-                    );
-                  },
+              Icon(Icons.auto_awesome, color: _accentColor, size: 22),
+              const SizedBox(width: 10),
+              const Text(
+                "GLOW MANAGEMENT",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.0,
                 ),
               ),
             ],
           ),
-          
-          const SizedBox(height: 40),
-          
-          // Searchable Recent Activity
-          const Text(
-            "Recent Activity",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          const SizedBox(height: 32),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                _adminNavItem(0, Icons.dashboard_customize_rounded, "Dashboard Overview", isMobile),
+                _adminNavItem(1, Icons.people_alt_rounded, "User Management", isMobile),
+                _adminNavItem(2, Icons.storefront_rounded, "Active Salons", isMobile),
+                _adminNavItem(3, Icons.face_retouching_natural_rounded, "Client Directory", isMobile),
+                _adminNavItem(4, Icons.verified_user_rounded, "Pending Requests", isMobile),
+                _adminNavItem(5, Icons.chat_bubble_outline_rounded, "Live Messages", isMobile),
+                _adminNavItem(6, Icons.campaign_rounded, "Global Broadcasts", isMobile),
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          _buildSearchableRecentActivity(),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFF262626))),
+            ),
+            child: _adminNavItem(9, Icons.logout_rounded, "Secure Log Out", isMobile, isLogout: true),
+          ),
         ],
       ),
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon, Color color, VoidCallback? onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
+  Widget _adminNavItem(int index, IconData icon, String label, bool isMobile, {bool isLogout = false}) {
+    bool selected = _activeTab == index;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFF262626) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ListTile(
+        onTap: isLogout
+            ? _showLogoutConfirmation
+            : () {
+                setState(() => _activeTab = index);
+                if (isMobile) Navigator.pop(context);
+              },
+        dense: true,
+        leading: Icon(icon, color: selected ? _accentColor : Colors.grey[500], size: 20),
+        title: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.grey[400],
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- MODERN DYNAMIC TOP BAR ---
+  Widget _buildTopBar({required bool showMenuButton}) {
+    return Container(
+      height: 70,
+      decoration: BoxDecoration(
+        color: _cardColor,
+        border: Border(bottom: BorderSide(color: _borderColor)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          if (showMenuButton) ...[
+            Builder(
+              builder: (context) => IconButton(
+                icon: Icon(Icons.menu_rounded, color: _primaryTextColor),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
             ),
           ],
-        ),
+          Expanded(
+            child: Container(
+              height: 40,
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: _isDarkMode ? const Color(0xFF222222) : const Color(0xFFF0EFFB),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(fontSize: 13, color: _primaryTextColor),
+                decoration: InputDecoration(
+                  hintText: "Search dynamically...",
+                  hintStyle: TextStyle(color: _secondaryTextColor, fontSize: 13),
+                  prefixIcon: Icon(Icons.search_rounded, color: _accentColor, size: 18),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ),
+          _buildTopBarBadge(
+            stream: FirebaseFirestore.instance.collection('pending_approvals').where('status', isEqualTo: 'pending').snapshots(),
+            icon: Icons.notifications_none_rounded,
+            tabIndex: 4,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBarBadge({required Stream<QuerySnapshot> stream, required IconData icon, required int tabIndex}) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
+      builder: (context, snapshot) {
+        int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+        return GestureDetector(
+          onTap: () => setState(() => _activeTab = tabIndex),
+          child: Stack(
+            alignment: Alignment.topRight,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Icon(icon, color: _primaryTextColor, size: 24),
+              ),
+              if (count > 0)
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: CircleAvatar(
+                    radius: 8,
+                    backgroundColor: _accentColor,
+                    child: Text(
+                      count.toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- CORE SYSTEM ROUTER ---
+  Widget _buildTabContent({required bool isMobile}) {
+    switch (_activeTab) {
+      case 0: return _buildDashboardOverview(isMobile: isMobile);
+      case 1: return _buildUserManagement('All', isMobile: isMobile);
+      case 2: return _buildUserManagement('Vendor', isMobile: isMobile);
+      case 3: return _buildUserManagement('Customer', isMobile: isMobile);
+      case 4: return _buildPendingApprovals(isMobile: isMobile);
+      case 5: return _buildMessagingCenter(isMobile: isMobile);
+      case 6: return _buildAnnouncements(isMobile: isMobile);
+      default: return _buildDashboardOverview(isMobile: isMobile);
+    }
+  }
+
+  // --- 1. DASHBOARD OVERVIEW ---
+  Widget _buildDashboardOverview({required bool isMobile}) {
+    return RefreshIndicator(
+      onRefresh: () async => setState(() {}),
+      color: _accentColor,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(isMobile ? 16 : 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 16),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+            Text("Control Dashboard", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _primaryTextColor)),
+            Text("Real-time telemetry and management metrics.", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
+            const SizedBox(height: 24),
+
+            GridView.count(
+              crossAxisCount: isMobile ? 2 : 4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: isMobile ? 1.4 : 1.6,
+              children: [
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('users').snapshots(),
+                  builder: (context, snap) => _analyticsCard("Total Profiles", snap.hasData ? snap.data!.docs.length.toString() : "0", Icons.people, Colors.blue, () => setState(() => _activeTab = 1)),
+                ),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Vendor').snapshots(),
+                  builder: (context, snap) => _analyticsCard("Salons Active", snap.hasData ? snap.data!.docs.length.toString() : "0", Icons.storefront_rounded, Colors.green, () => setState(() => _activeTab = 2)),
+                ),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Customer').snapshots(),
+                  builder: (context, snap) => _analyticsCard("Clients", snap.hasData ? snap.data!.docs.length.toString() : "0", Icons.face_retouching_natural_rounded, Colors.purple, () => setState(() => _activeTab = 3)),
+                ),
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('pending_approvals').where('status', isEqualTo: 'pending').snapshots(),
+                  builder: (context, snap) => _analyticsCard("Pending Approvals", snap.hasData ? snap.data!.docs.length.toString() : "0", Icons.verified_user_rounded, _accentColor, () => setState(() => _activeTab = 4)),
+                ),
+              ],
             ),
-            Text(label, style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 32),
+            Text("Recent Profile Signups", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _primaryTextColor)),
+            const SizedBox(height: 12),
+            _buildRealtimeRecentActivityList(),
           ],
         ),
       ),
     );
   }
 
-  // --- 2. USER MANAGEMENT (EXCLUDING SALON OWNER) ---
-  Widget _buildUserManagement(String roleFilter) {
-    Query userQuery = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', whereIn: roleFilter == 'All' 
-            ? ['Customer', 'Vendor'] 
-            : [roleFilter])
-        .orderBy('createdAt', descending: true);
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: userQuery.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          print('Error: ${snapshot.error}');
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+  Widget _analyticsCard(String title, String value, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
-                const SizedBox(height: 16),
-                Text('Error: ${snapshot.error}'),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => setState(() {}),
-                  child: const Text('Retry'),
-                ),
+                Icon(icon, color: color, size: 20),
+                const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 10),
               ],
             ),
-          );
-        }
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _primaryTextColor)),
+                Text(title, style: TextStyle(fontSize: 11, color: _secondaryTextColor, fontWeight: FontWeight.w500)),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
 
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+  // --- 2. USER MANAGEMENT VIEWS ---
+  Widget _buildUserManagement(String filter, {required bool isMobile}) {
+    Query query = FirebaseFirestore.instance.collection('users');
+    if (filter != 'All') {
+      query = query.where('role', isEqualTo: filter);
+    }
 
-        var users = snapshot.data!.docs;
-        
-        // Apply search filter
+    return StreamBuilder<QuerySnapshot>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        var docs = snapshot.data!.docs;
+
         if (_searchQuery.isNotEmpty) {
-          users = users.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final name = (data['name'] ?? '').toString().toLowerCase();
-            final email = (data['email'] ?? '').toString().toLowerCase();
-            final phone = (data['phone'] ?? '').toString().toLowerCase();
-            return name.contains(_searchQuery) || 
-                   email.contains(_searchQuery) || 
-                   phone.contains(_searchQuery);
+          docs = docs.where((d) {
+            var data = d.data() as Map<String, dynamic>;
+            return (data['name'] ?? '').toString().toLowerCase().contains(_searchQuery) ||
+                   (data['email'] ?? '').toString().toLowerCase().contains(_searchQuery);
           }).toList();
         }
 
-        if (users.isEmpty) {
+        if (docs.isEmpty) {
+          return Center(child: Text("No user records found.", style: TextStyle(color: _secondaryTextColor)));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            var doc = docs[index];
+            var data = doc.data() as Map<String, dynamic>;
+            bool isActive = data['isActive'] ?? true;
+
+            return Card(
+              color: _cardColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _borderColor)),
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _accentColor.withOpacity(0.15),
+                  child: Text(
+                    (data['name'] ?? 'U').isNotEmpty ? (data['name'] ?? 'U')[0].toUpperCase() : 'U',
+                    style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                title: Text(data['name'] ?? 'No Name', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold)),
+                subtitle: Text("${data['email'] ?? ''} • [${data['role'] ?? 'User'}]", style: TextStyle(color: _secondaryTextColor, fontSize: 12)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(isActive ? Icons.block : Icons.check_circle, color: isActive ? Colors.red : Colors.green, size: 20),
+                      onPressed: () => FirebaseFirestore.instance.collection('users').doc(doc.id).update({'isActive': !isActive}),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                      onPressed: () => _confirmDeleteUser(doc.id),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- 3. PENDING APPROVAL QUEUE ---
+  Widget _buildPendingApprovals({required bool isMobile}) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('pending_approvals').where('status', isEqualTo: 'pending').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        var docs = snapshot.data!.docs;
+
+        if (docs.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.search_off, size: 80, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                Text(
-                  'No users found',
-                  style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                ),
+                Icon(Icons.done_all_rounded, size: 40, color: _secondaryTextColor),
+                const SizedBox(height: 8),
+                Text("Verification queue clean!", style: TextStyle(color: _primaryTextColor)),
               ],
             ),
           );
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(32),
-          itemCount: users.length,
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
           itemBuilder: (context, index) {
-            var user = users[index];
-            var data = user.data() as Map<String, dynamic>;
-            
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: ExpansionTile(
-                leading: CircleAvatar(
-                  radius: 25,
-                  backgroundColor: const Color(0xFFF2845C),
-                  child: Text(
-                    (data['name'] ?? 'U')[0].toUpperCase(),
-                    style: const TextStyle(fontSize: 20, color: Colors.white),
-                  ),
-                ),
-                title: Text(
-                  data['name'] ?? 'No Name',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(data['email'] ?? 'No Email'),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        _buildUserBadge(data['role'] ?? 'Unknown'),
-                        if (data['approved'] == false)
-                          _buildStatusBadge('Pending', Colors.orange),
-                        if (data['isActive'] == false)
-                          _buildStatusBadge('Inactive', Colors.red),
-                        if (data['isActive'] == true && data['approved'] == true)
-                          _buildStatusBadge('Active', Colors.green),
-                      ],
-                    ),
-                  ],
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildActionButton(
-                          icon: Icons.message,
-                          label: 'Message',
-                          color: Colors.blue,
-                          onTap: () => _openMessageDialog(user.id, data['name']),
-                        ),
-                        _buildActionButton(
-                          icon: data['isActive'] == false ? Icons.play_arrow : Icons.pause,
-                          label: data['isActive'] == false ? 'Activate' : 'Suspend',
-                          color: data['isActive'] == false ? Colors.green : Colors.orange,
-                          onTap: () => _toggleUserStatus(user.id, data),
-                        ),
-                        _buildActionButton(
-                          icon: Icons.edit,
-                          label: 'Edit',
-                          color: Colors.purple,
-                          onTap: () => _editUserDialog(user.id, data),
-                        ),
-                        _buildActionButton(
-                          icon: Icons.delete,
-                          label: 'Delete',
-                          color: Colors.red,
-                          onTap: () => _deleteUserDialog(user.id),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildUserBadge(String role) {
-    Color color;
-    switch (role) {
-      case 'Vendor':
-        color = Colors.green;
-        break;
-      case 'Customer':
-        color = Colors.blue;
-        break;
-      default:
-        color = Colors.grey;
-    }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        role,
-        style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(String status, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(fontSize: 12, color: color),
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: color),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- 3. PENDING APPROVALS (VENDORS ONLY) ---
-  Widget _buildPendingApprovals() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('pending_approvals')
-          .where('status', isEqualTo: 'pending')
-          .orderBy('submittedAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          print('Error: ${snapshot.error}');
-          if (snapshot.error.toString().contains('Missing or insufficient permissions')) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.security, size: 80, color: Colors.red[300]),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Permission Error',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Please check Firestore security rules',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            );
-          }
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        // Filter to only show vendor applications
-        var allDocs = snapshot.data!.docs;
-        var pendingDocs = allDocs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          return data['type'] == 'vendor' || data['role'] == 'Vendor';
-        }).toList();
-
-        if (pendingDocs.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle_outline, size: 100, color: Colors.green),
-                SizedBox(height: 20),
-                Text(
-                  "No Pending Approvals",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                Text("All vendor applications have been processed"),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(32),
-          itemCount: pendingDocs.length,
-          itemBuilder: (context, index) {
-            var doc = pendingDocs[index];
+            var doc = docs[index];
             var data = doc.data() as Map<String, dynamic>;
-            
-            return Card(
-              margin: const EdgeInsets.only(bottom: 20),
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: const Color(0xFFF2845C),
-                          child: Text(
-                            (data['name'] ?? 'U')[0].toUpperCase(),
-                            style: const TextStyle(fontSize: 32, color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                data['name'] ?? 'No Name',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _buildInfoRow(Icons.email, data['email'] ?? 'N/A'),
-                              _buildInfoRow(Icons.business, data['businessName'] ?? 'N/A'),
-                              _buildInfoRow(Icons.phone, data['phone'] ?? 'N/A'),
-                              _buildInfoRow(
-                                Icons.calendar_today,
-                                'Applied: ${_formatDate(data['submittedAt'])}',
-                              ),
-                              if (data['address'] != null)
-                                _buildInfoRow(Icons.location_on, data['address']),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 40),
-                    
-                    // Approval Actions
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => _showRejectionDialog(doc.id),
-                          icon: const Icon(Icons.close),
-                          label: const Text("Reject"),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            side: const BorderSide(color: Colors.red),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => _approveVendor(doc.id, data['uid']),
-                          icon: const Icon(Icons.check),
-                          label: const Text("Approve Vendor"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(color: _cardColor, borderRadius: BorderRadius.circular(14), border: Border.all(color: _borderColor)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(data['businessName'] ?? 'Salon Registration Request', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text("Owner: ${data['name'] ?? ''} • ${data['email'] ?? ''}", style: TextStyle(color: _secondaryTextColor, fontSize: 12)),
+                  const Divider(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => FirebaseFirestore.instance.collection('pending_approvals').doc(doc.id).update({'status': 'rejected'}),
+                        child: const Text("Reject", style: TextStyle(color: Colors.red)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: _accentColor),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance.collection('pending_approvals').doc(doc.id).update({'status': 'approved'});
+                          if (data['uid'] != null) {
+                            await FirebaseFirestore.instance.collection('users').doc(data['uid']).update({'role': 'Vendor'});
+                          }
+                        },
+                        child: const Text("Approve", style: TextStyle(color: Colors.white)),
+                      )
+                    ],
+                  )
+                ],
               ),
             );
           },
@@ -827,781 +510,161 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.grey[600]),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- 4. MESSAGING CENTER (FIXED PERMISSIONS) ---
-  Widget _buildMessagingCenter() {
-    return Row(
+  // --- 4. REAL-TIME LIVE MESSAGING INTERFACE ---
+  Widget _buildMessagingCenter({required bool isMobile}) {
+    return Column(
       children: [
-        // Users List (Left Panel)
         Expanded(
-          flex: 1,
-          child: Container(
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Select User to Message",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('admin_messages').orderBy('timestamp', descending: true).snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+              var messages = snapshot.data!.docs;
+
+              if (messages.isEmpty) {
+                return Center(child: Text("No live dynamic logs here.", style: TextStyle(color: _secondaryTextColor)));
+              }
+
+              return ListView.builder(
+                reverse: true,
+                padding: const EdgeInsets.all(16),
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  var data = messages[index].data() as Map<String, dynamic>;
+                  bool isAdmin = data['direction'] == 'from_admin';
+
+                  return Align(
+                    alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isAdmin ? _accentColor : (_isDarkMode ? Colors.grey[800] : Colors.grey[300]),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _selectedUserType,
-                        items: const [
-                          DropdownMenuItem(value: 'All', child: Text('All Users')),
-                          DropdownMenuItem(value: 'Vendor', child: Text('Vendors Only')),
-                          DropdownMenuItem(value: 'Customer', child: Text('Customers Only')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedUserType = value!;
-                          });
-                        },
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
+                      child: Text(
+                        data['message'] ?? '',
+                        style: TextStyle(color: isAdmin ? Colors.white : _primaryTextColor),
                       ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: _buildUserListForMessaging(),
-                ),
-              ],
-            ),
-          ),
-        ),
-        
-        // Message Area (Right Panel)
-        Expanded(
-          flex: 2,
-          child: Container(
-            color: Colors.grey[50],
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('admin_messages')
-                  .orderBy('timestamp', descending: true)
-                  .limit(50)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                var messages = snapshot.data!.docs;
-                
-                if (messages.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.message, size: 80, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(
-                          "No messages yet",
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
-                        ),
-                      ],
                     ),
                   );
+                },
+              );
+            },
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: _cardColor,
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _messageController,
+                  style: TextStyle(color: _primaryTextColor),
+                  decoration: const InputDecoration(hintText: "Type live message...", border: InputBorder.none),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.send, color: _accentColor),
+                onPressed: _sendMessage,
+              )
+            ],
+          ),
+        )
+      ],
+    );
+  }
+
+  // --- 5. GLOBAL BROADCAST SYSTEM ---
+  Widget _buildAnnouncements({required bool isMobile}) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          TextField(
+            controller: _announcementController,
+            style: TextStyle(color: _primaryTextColor),
+            decoration: InputDecoration(
+              hintText: "Post global dynamic announcement...",
+              hintStyle: TextStyle(color: _secondaryTextColor),
+              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
+              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentColor)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: _accentColor),
+              onPressed: _postAnnouncement,
+              child: const Text("Broadcast Live", style: TextStyle(color: Colors.white)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('announcements').orderBy('timestamp', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SizedBox();
+                var list = snapshot.data!.docs;
+
+                if (list.isEmpty) {
+                  return Center(child: Text("No history of global alerts.", style: TextStyle(color: _secondaryTextColor)));
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    var msg = messages[index];
-                    var data = msg.data() as Map<String, dynamic>;
-                    
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: data['direction'] == 'from_admin' 
-                              ? const Color(0xFFF2845C) 
-                              : Colors.blue,
-                          child: Icon(
-                            data['direction'] == 'from_admin' 
-                                ? Icons.admin_panel_settings 
-                                : Icons.person,
-                            color: Colors.white,
-                          ),
-                        ),
-                        title: Text(data['userName'] ?? 'User'),
-                        subtitle: Text(data['message'] ?? ''),
-                        trailing: Text(
-                          _formatTimeAgo(data['timestamp']),
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
+                  itemCount: list.length,
+                  itemBuilder: (context, i) {
+                    var data = list[i].data() as Map<String, dynamic>;
+                    return ListTile(
+                      title: Text(data['message'] ?? '', style: TextStyle(color: _primaryTextColor)),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, size: 16, color: Colors.grey),
+                        onPressed: () => FirebaseFirestore.instance.collection('announcements').doc(list[i].id).delete(),
                       ),
                     );
                   },
                 );
               },
             ),
-          ),
-        ),
-      ],
+          )
+        ],
+      ),
     );
   }
 
-  Widget _buildUserListForMessaging() {
-    Query userQuery = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', whereIn: _selectedUserType == 'All' 
-            ? ['Customer', 'Vendor'] 
-            : [_selectedUserType])
-        .orderBy('createdAt', descending: true);
-
+  // --- REALTIME SUB-LIST LISTENER ---
+  Widget _buildRealtimeRecentActivityList() {
     return StreamBuilder<QuerySnapshot>(
-      stream: userQuery.snapshots(),
+      stream: FirebaseFirestore.instance.collection('users').orderBy('createdAt', descending: true).limit(5).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        var docs = snapshot.data!.docs;
+
+        if (docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            alignment: Alignment.center,
+            child: Text("No new signups recorded.", style: TextStyle(color: _secondaryTextColor)),
+          );
         }
 
-        var users = snapshot.data!.docs;
-        
-        // Apply search filter
-        if (_searchQuery.isNotEmpty) {
-          users = users.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final name = (data['name'] ?? '').toString().toLowerCase();
-            final email = (data['email'] ?? '').toString().toLowerCase();
-            return name.contains(_searchQuery) || email.contains(_searchQuery);
-          }).toList();
-        }
-
-        return ListView.builder(
-          itemCount: users.length,
-          itemBuilder: (context, index) {
-            var user = users[index];
-            var data = user.data() as Map<String, dynamic>;
-            
-            return ListTile(
-              onTap: () => _openMessageDialog(user.id, data['name']),
-              leading: CircleAvatar(
-                backgroundColor: const Color(0xFFF2845C),
-                child: Text(
-                  (data['name'] ?? 'U')[0].toUpperCase(),
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-              title: Text(data['name'] ?? 'No Name'),
-              subtitle: Text(data['email'] ?? ''),
-              trailing: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('admin_messages')
-                    .where('userId', isEqualTo: user.id)
-                    .where('read', isEqualTo: false)
-                    .snapshots(),
-                builder: (context, msgSnapshot) {
-                  int unread = msgSnapshot.hasData ? msgSnapshot.data!.docs.length : 0;
-                  if (unread > 0) {
-                    return Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        unread.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    );
-                  }
-                  return const Icon(Icons.message_outlined, color: Colors.grey);
-                },
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _openMessageDialog(String userId, String? userName) {
-    _messageController.clear();
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Send Message to ${userName ?? 'User'}"),
-        content: Container(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _messageController,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText: "Type your message here...",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (_messageController.text.isNotEmpty) {
-                await _sendMessage(userId, userName ?? 'User', _messageController.text);
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF2845C),
-            ),
-            child: const Text("Send Message"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _sendMessage(String userId, String userName, String message) async {
-    try {
-      await FirebaseFirestore.instance.collection('admin_messages').add({
-        'userId': userId,
-        'userName': userName,
-        'message': message,
-        'timestamp': FieldValue.serverTimestamp(),
-        'read': false,
-        'direction': 'from_admin',
-        'adminId': FirebaseAuth.instance.currentUser!.uid,
-      });
-
-      // Also create a notification for the user
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'userId': userId,
-        'title': 'New Message from Admin',
-        'body': message.length > 50 ? '${message.substring(0, 50)}...' : message,
-        'type': 'message',
-        'read': false,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      _showSuccessMessage("Message sent to $userName");
-    } catch (e) {
-      print('Error sending message: $e');
-      _showErrorMessage("Error sending message. Check permissions.");
-    }
-  }
-
-  // --- 5. ANNOUNCEMENTS (FIXED PERMISSIONS) ---
-  Widget _buildAnnouncements() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Create Announcement Panel
-          Expanded(
-            flex: 1,
-            child: Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Create Announcement",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    DropdownButtonFormField<String>(
-                      value: 'All',
-                      items: const [
-                        DropdownMenuItem(value: 'All', child: Text('All Users')),
-                        DropdownMenuItem(value: 'Vendor', child: Text('Vendors Only')),
-                        DropdownMenuItem(value: 'Customer', child: Text('Customers Only')),
-                      ],
-                      onChanged: (value) {},
-                      decoration: const InputDecoration(
-                        labelText: "Send To",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    TextField(
-                      controller: _announcementController,
-                      maxLines: 8,
-                      decoration: const InputDecoration(
-                        labelText: "Announcement Message",
-                        hintText: "Type your announcement here...",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _sendAnnouncement,
-                            icon: const Icon(Icons.campaign),
-                            label: const Text("Send Announcement"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFF2845C),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 32),
-          
-          // Announcement History
-          Expanded(
-            flex: 1,
-            child: Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Announcement History",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    Expanded(
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('announcements')
-                            .orderBy('timestamp', descending: true)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            print('Error: ${snapshot.error}');
-                            return Center(child: Text('Error loading announcements'));
-                          }
-                          
-                          if (!snapshot.hasData) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-                          
-                          var announcements = snapshot.data!.docs;
-                          
-                          if (announcements.isEmpty) {
-                            return const Center(
-                              child: Text("No announcements yet"),
-                            );
-                          }
-                          
-                          return ListView.builder(
-                            itemCount: announcements.length,
-                            itemBuilder: (context, index) {
-                              var ann = announcements[index];
-                              var data = ann.data() as Map<String, dynamic>;
-                              
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: const Color(0xFFF2845C),
-                                    child: const Icon(Icons.campaign, color: Colors.white),
-                                  ),
-                                  title: Text(
-                                    data['message'],
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  subtitle: Text(
-                                    'Sent to: ${data['targetAudience'] ?? 'All'} • ${_formatDateTime(data['timestamp'])}',
-                                  ),
-                                  isThreeLine: true,
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _sendAnnouncement() async {
-    if (_announcementController.text.isEmpty) {
-      _showErrorMessage("Please enter an announcement message");
-      return;
-    }
-
-    try {
-      // Save announcement
-      await FirebaseFirestore.instance.collection('announcements').add({
-        'message': _announcementController.text,
-        'targetAudience': 'All',
-        'timestamp': FieldValue.serverTimestamp(),
-        'sentBy': FirebaseAuth.instance.currentUser!.uid,
-      });
-
-      // Get all users (excluding admin)
-      var users = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', whereIn: ['Customer', 'Vendor'])
-          .get();
-      
-      // Create notifications for all users
-      for (var user in users.docs) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': user.id,
-          'title': 'New Announcement',
-          'body': _announcementController.text.length > 100 
-              ? '${_announcementController.text.substring(0, 100)}...'
-              : _announcementController.text,
-          'type': 'announcement',
-          'read': false,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-      }
-
-      _announcementController.clear();
-      _showSuccessMessage("Announcement sent to all users!");
-    } catch (e) {
-      print('Error sending announcement: $e');
-      _showErrorMessage("Error sending announcement. Check permissions.");
-    }
-  }
-
-  // --- 6. ANALYTICS (FIXED STATS) ---
-  Widget _buildAnalytics() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Platform Analytics",
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 32),
-          
-          // User Statistics (excluding Salon Owner)
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .where('role', whereIn: ['Customer', 'Vendor'])
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const SizedBox();
-              
-              var users = snapshot.data!.docs;
-              int total = users.length;
-              int vendors = users.where((doc) => 
-                (doc.data() as Map)['role'] == 'Vendor').length;
-              int customers = users.where((doc) => 
-                (doc.data() as Map)['role'] == 'Customer').length;
-              
-              return Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "User Statistics",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          _analyticsItem("Total", total.toString(), Colors.blue),
-                          _analyticsItem("Vendors", vendors.toString(), Colors.green),
-                          _analyticsItem("Customers", customers.toString(), Colors.purple),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          
-          const SizedBox(height: 32),
-          
-          // Pending Approvals Stats
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('pending_approvals')
-                .where('status', isEqualTo: 'pending')
-                .snapshots(),
-            builder: (context, snapshot) {
-              int pending = 0;
-              if (snapshot.hasData && snapshot.data != null) {
-                pending = snapshot.data!.docs.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  return data['type'] == 'vendor' || data['role'] == 'Vendor';
-                }).length;
-              }
-              
-              return Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Pending Approvals",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        children: [
-                          _analyticsItem("Pending", pending.toString(), Colors.orange),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          
-          const SizedBox(height: 32),
-          
-          // Searchable Recent Activity
-          const Text(
-            "Recent Activity",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 20),
-          _buildSearchableRecentActivity(),
-        ],
-      ),
-    );
-  }
-
-  Widget _analyticsItem(String label, String value, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.grey)),
-        ],
-      ),
-    );
-  }
-
-  // --- 7. SETTINGS ---
-  Widget _buildSettings() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Admin Settings",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 32),
-              
-              _buildSettingTile(
-                Icons.security,
-                "Security Settings",
-                "Configure password policies, 2FA, etc.",
-                () {},
-              ),
-              
-              _buildSettingTile(
-                Icons.notifications,
-                "Notification Settings",
-                "Configure email and push notification preferences",
-                () {},
-              ),
-              
-              _buildSettingTile(
-                Icons.brush,
-                "Appearance",
-                "Customize admin dashboard theme",
-                () {},
-              ),
-              
-              _buildSettingTile(
-                Icons.backup,
-                "Backup & Restore",
-                "Manage database backups",
-                () {},
-              ),
-              
-              _buildSettingTile(
-                Icons.api,
-                "API Configuration",
-                "Configure payment gateways and external APIs",
-                () {},
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSettingTile(IconData icon, String title, String subtitle, VoidCallback onTap) {
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF2845C).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: const Color(0xFFF2845C)),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-    );
-  }
-
-  // --- SEARCHABLE RECENT ACTIVITY ---
-  Widget _buildSearchableRecentActivity() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('role', whereIn: ['Customer', 'Vendor'])
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        var users = snapshot.data!.docs;
-        
-        // Apply search filter if any
-        if (_searchQuery.isNotEmpty) {
-          users = users.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final name = (data['name'] ?? '').toString().toLowerCase();
-            final email = (data['email'] ?? '').toString().toLowerCase();
-            return name.contains(_searchQuery) || email.contains(_searchQuery);
-          }).toList();
-        }
-
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
+        return Container(
+          decoration: BoxDecoration(color: _cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderColor)),
           child: ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: users.length > 10 ? 10 : users.length,
-            separatorBuilder: (context, index) => const Divider(),
+            itemCount: docs.length,
+            separatorBuilder: (c, i) => Divider(height: 1, color: _borderColor),
             itemBuilder: (context, index) {
-              var user = users[index];
-              var data = user.data() as Map<String, dynamic>;
-              
+              var data = docs[index].data() as Map<String, dynamic>;
               return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: const Color(0xFFF2845C),
-                  child: Text(
-                    (data['name'] ?? 'U')[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-                title: Text(data['name'] ?? 'Unknown'),
-                subtitle: Text(
-                  "${data['role'] ?? 'User'} joined ${_formatDate(data['createdAt'])}",
-                ),
-                trailing: Text(
-                  _formatTimeAgo(data['createdAt']),
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+                dense: true,
+                leading: const Icon(Icons.account_circle, color: Colors.grey),
+                title: Text(data['name'] ?? 'New Account Node', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.w600)),
+                subtitle: Text(data['role'] ?? 'Customer', style: TextStyle(color: _secondaryTextColor)),
+                trailing: const Icon(Icons.check_circle, color: Colors.green, size: 14),
               );
             },
           ),
@@ -1610,327 +673,64 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- HELPER FUNCTIONS (unchanged) ---
-  Future<void> _approveVendor(String docId, String uid) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('pending_approvals')
-          .doc(docId)
-          .update({
-        'status': 'approved',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'reviewedBy': FirebaseAuth.instance.currentUser!.uid,
-      });
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({
-        'approved': true,
-        'role': 'Vendor',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'userId': uid,
-        'title': 'Vendor Application Approved',
-        'body': 'Congratulations! Your vendor application has been approved.',
-        'type': 'approval',
-        'read': false,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      _showSuccessMessage("Vendor approved successfully!");
-    } catch (e) {
-      print('Error approving vendor: $e');
-      _showErrorMessage("Error approving vendor. Check permissions.");
-    }
+  void _sendMessage() async {
+    if (_messageController.text.trim().isEmpty) return;
+    await FirebaseFirestore.instance.collection('admin_messages').add({
+      'message': _messageController.text.trim(),
+      'timestamp': FieldValue.serverTimestamp(),
+      'direction': 'from_admin',
+    });
+    _messageController.clear();
   }
 
-  Future<void> _showRejectionDialog(String docId) {
-    TextEditingController reasonController = TextEditingController();
-    
-    return showDialog(
+  void _postAnnouncement() async {
+    if (_announcementController.text.trim().isEmpty) return;
+    await FirebaseFirestore.instance.collection('announcements').add({
+      'message': _announcementController.text.trim(),
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    _announcementController.clear();
+  }
+
+  void _confirmDeleteUser(String id) {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Reject Vendor Application"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Please provide a reason for rejection:"),
-            const SizedBox(height: 16),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: "Reason...",
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
+        backgroundColor: _cardColor,
+        title: Text("Delete account permanently?", style: TextStyle(color: _primaryTextColor, fontSize: 16)),
         actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await _rejectVendor(docId, reasonController.text);
+            onPressed: () {
+              FirebaseFirestore.instance.collection('users').doc(id).delete();
               Navigator.pop(context);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("Reject"),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _rejectVendor(String docId, String reason) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('pending_approvals')
-          .doc(docId)
-          .update({
-        'status': 'rejected',
-        'rejectionReason': reason,
-        'reviewedAt': FieldValue.serverTimestamp(),
-      });
-
-      _showSuccessMessage("Vendor application rejected.");
-    } catch (e) {
-      print('Error rejecting vendor: $e');
-      _showErrorMessage("Error rejecting vendor. Check permissions.");
-    }
-  }
-
-  Future<void> _toggleUserStatus(String uid, Map<String, dynamic> data) async {
-    try {
-      bool newStatus = data['isActive'] == false;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({
-        'isActive': newStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      
-      _showSuccessMessage(newStatus ? "User activated" : "User suspended");
-    } catch (e) {
-      print('Error updating status: $e');
-      _showErrorMessage("Error updating user status");
-    }
-  }
-
-  Future<void> _editUserDialog(String uid, Map<String, dynamic> data) {
-    TextEditingController nameController = TextEditingController(text: data['name']);
-    TextEditingController emailController = TextEditingController(text: data['email']);
-    TextEditingController phoneController = TextEditingController(text: data['phone'] ?? '');
-    String selectedRole = data['role'] ?? 'Customer';
-    bool isActive = data['isActive'] ?? true;
-    bool approved = data['approved'] ?? true;
-
-    return showDialog(
+  void _showLogoutConfirmation() {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Edit User"),
-        content: Container(
-          width: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: "Name"),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: emailController,
-                  decoration: const InputDecoration(labelText: "Email"),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: phoneController,
-                  decoration: const InputDecoration(labelText: "Phone"),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedRole,
-                  items: const [
-                    DropdownMenuItem(value: 'Customer', child: Text('Customer')),
-                    DropdownMenuItem(value: 'Vendor', child: Text('Vendor')),
-                  ],
-                  onChanged: (value) {
-                    selectedRole = value!;
-                  },
-                  decoration: const InputDecoration(labelText: "Role"),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: CheckboxListTile(
-                        title: const Text("Active"),
-                        value: isActive,
-                        onChanged: (value) {
-                          isActive = value!;
-                        },
-                      ),
-                    ),
-                    Expanded(
-                      child: CheckboxListTile(
-                        title: const Text("Approved"),
-                        value: approved,
-                        onChanged: (value) {
-                          approved = value!;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
+        backgroundColor: _cardColor,
+        title: Text("Log Out?", style: TextStyle(color: _primaryTextColor, fontSize: 16)),
+        content: Text("Do you really want to close the dashboard session?", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .update({
-                  'name': nameController.text,
-                  'email': emailController.text,
-                  'phone': phoneController.text,
-                  'role': selectedRole,
-                  'isActive': isActive,
-                  'approved': approved,
-                  'updatedAt': FieldValue.serverTimestamp(),
-                });
-                Navigator.pop(context);
-                _showSuccessMessage("User updated successfully!");
-              } catch (e) {
-                print('Error updating user: $e');
-                _showErrorMessage("Error updating user");
-              }
-            },
-            child: const Text("Save"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("No")),
+          TextButton(onPressed: () => _signOut(), child: const Text("Yes, Log Out")),
         ],
       ),
     );
   }
 
-  Future<void> _deleteUserDialog(String uid) {
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete User"),
-        content: const Text(
-          "Are you sure you want to delete this user? "
-          "This action cannot be undone and all user data will be permanently removed."
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .delete();
-                    
-                Navigator.pop(context);
-                _showSuccessMessage("User deleted successfully!");
-              } catch (e) {
-                print('Error deleting user: $e');
-                _showErrorMessage("Error deleting user");
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("Delete"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(dynamic timestamp) {
-    if (timestamp == null) return 'Unknown';
-    if (timestamp is Timestamp) {
-      DateTime date = timestamp.toDate();
-      return '${date.day}/${date.month}/${date.year}';
-    }
-    return 'Unknown';
-  }
-
-  String _formatDateTime(dynamic timestamp) {
-    if (timestamp == null) return 'Unknown';
-    if (timestamp is Timestamp) {
-      DateTime date = timestamp.toDate();
-      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-    }
-    return 'Unknown';
-  }
-
-  String _formatTimeAgo(dynamic timestamp) {
-    if (timestamp == null) return 'Unknown';
-    if (timestamp is Timestamp) {
-      DateTime date = timestamp.toDate();
-      Duration diff = DateTime.now().difference(date);
-      
-      if (diff.inDays > 0) {
-        return '${diff.inDays}d ago';
-      } else if (diff.inHours > 0) {
-        return '${diff.inHours}h ago';
-      } else if (diff.inMinutes > 0) {
-        return '${diff.inMinutes}m ago';
-      } else {
-        return 'Just now';
-      }
-    }
-    return 'Unknown';
-  }
-
-  void _showSuccessMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  void _showErrorMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  Future<void> _signOut() async {
+  void _signOut() async {
     await FirebaseAuth.instance.signOut();
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SignInScreen()),
-      );
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const SignInScreen()));
     }
   }
 }
