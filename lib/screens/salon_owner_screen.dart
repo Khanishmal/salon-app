@@ -20,6 +20,10 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
   // Controllers for messaging and announcements
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _announcementController = TextEditingController();
+  
+  // Track selected active customer/user for 1-on-1 live chat support
+  Map<String, dynamic>? _selectedChatUser;
+  String _broadcastTarget = 'All'; // Target population filter
 
   @override
   void initState() {
@@ -39,13 +43,13 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     super.dispose();
   }
 
-  // Define Theme Colors Dynamically
+  // Define Design Theme Colors Dynamically
   Color get _bgColor => _isDarkMode ? const Color(0xFF0D0D0D) : const Color(0xFFFAF9F6);
   Color get _cardColor => _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white;
   Color get _primaryTextColor => _isDarkMode ? Colors.white : const Color(0xFF1A1A1A);
   Color get _secondaryTextColor => _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
   Color get _borderColor => _isDarkMode ? const Color(0xFF2D2D2D) : const Color(0xFFEAE6DF);
-  Color get _accentColor => const Color(0xFFE28766); // Premium Rose/Copper Gold
+  Color get _accentColor => const Color(0xFFE28766); // Premium Accent Gold
 
   @override
   Widget build(BuildContext context) {
@@ -57,9 +61,12 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
           canPop: false,
           onPopInvokedWithResult: (didPop, result) {
             if (didPop) return;
-            // Instantly returns to Dashboard Overview if on any other sub-tab
+            // Instantly moves back to Dashboard Overview default screen instead of popping
             if (_activeTab != 0) {
-              setState(() => _activeTab = 0);
+              setState(() {
+                _activeTab = 0;
+                _selectedChatUser = null; // Reset selection state
+              });
             } else {
               _showLogoutConfirmation();
             }
@@ -82,7 +89,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                         _buildTopBar(showMenuButton: isMobile),
                         Expanded(
                           child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
+                            duration: const Duration(milliseconds: 250),
                             child: Container(
                               key: ValueKey<int>(_activeTab + (_isDarkMode ? 100 : 0)),
                               child: _buildTabContent(isMobile: isMobile),
@@ -110,7 +117,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- PREMIUM RESPONSIVE SIDEBAR ---
+  // --- ADMIN PLATFORM NAVIGATION SIDEBAR ---
   Widget _buildAdminSidebar({required bool isMobile}) {
     return Container(
       width: 280,
@@ -173,7 +180,10 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
         onTap: isLogout
             ? _showLogoutConfirmation
             : () {
-                setState(() => _activeTab = index);
+                setState(() {
+                  _activeTab = index;
+                  if (index != 5) _selectedChatUser = null; // clear conversation window context
+                });
                 if (isMobile) Navigator.pop(context);
               },
         dense: true,
@@ -190,7 +200,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- MODERN DYNAMIC TOP BAR ---
+  // --- MODERN DYNAMIC HEADER TOP BAR ---
   Widget _buildTopBar({required bool showMenuButton}) {
     return Container(
       height: 70,
@@ -221,7 +231,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                 controller: _searchController,
                 style: TextStyle(fontSize: 13, color: _primaryTextColor),
                 decoration: InputDecoration(
-                  hintText: "Search dynamically...",
+                  hintText: "Search dynamically across records...",
                   hintStyle: TextStyle(color: _secondaryTextColor, fontSize: 13),
                   prefixIcon: Icon(Icons.search_rounded, color: _accentColor, size: 18),
                   border: InputBorder.none,
@@ -274,7 +284,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- CORE SYSTEM ROUTER ---
+  // --- CORE VIEW ROUTER ---
   Widget _buildTabContent({required bool isMobile}) {
     switch (_activeTab) {
       case 0: return _buildDashboardOverview(isMobile: isMobile);
@@ -282,13 +292,13 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
       case 2: return _buildUserManagement('Vendor', isMobile: isMobile);
       case 3: return _buildUserManagement('Customer', isMobile: isMobile);
       case 4: return _buildPendingApprovals(isMobile: isMobile);
-      case 5: return _buildMessagingCenter(isMobile: isMobile);
-      case 6: return _buildAnnouncements(isMobile: isMobile);
+      case 5: return _buildLiveMessagingCenter(isMobile: isMobile);
+      case 6: return _buildAnnouncementsHub(isMobile: isMobile);
       default: return _buildDashboardOverview(isMobile: isMobile);
     }
   }
 
-  // --- 1. DASHBOARD OVERVIEW ---
+  // --- 1. PREMIUM DASHBOARD OVERVIEW SCREEN ---
   Widget _buildDashboardOverview({required bool isMobile}) {
     return RefreshIndicator(
       onRefresh: () async => setState(() {}),
@@ -300,7 +310,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("Control Dashboard", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _primaryTextColor)),
-            Text("Real-time telemetry and management metrics.", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
+            Text("Real-time telemetry and ecosystem management metrics.", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
             const SizedBox(height: 24),
 
             GridView.count(
@@ -374,7 +384,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- 2. USER MANAGEMENT VIEWS ---
+  // --- 2. COMPLETE USER PROFILE DIRECTORY MANAGEMENT ---
   Widget _buildUserManagement(String filter, {required bool isMobile}) {
     Query query = FirebaseFirestore.instance.collection('users');
     if (filter != 'All') {
@@ -396,7 +406,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
         }
 
         if (docs.isEmpty) {
-          return Center(child: Text("No user records found.", style: TextStyle(color: _secondaryTextColor)));
+          return Center(child: Text("No user profile records found matches.", style: TextStyle(color: _secondaryTextColor)));
         }
 
         return ListView.builder(
@@ -419,7 +429,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                     style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold),
                   ),
                 ),
-                title: Text(data['name'] ?? 'No Name', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold)),
+                title: Text(data['name'] ?? 'No Registered Name', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold)),
                 subtitle: Text("${data['email'] ?? ''} • [${data['role'] ?? 'User'}]", style: TextStyle(color: _secondaryTextColor, fontSize: 12)),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -442,7 +452,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- 3. PENDING APPROVAL QUEUE ---
+  // --- 3. INTAKE PROCESSING & APPROVAL MANAGEMENT PANEL ---
   Widget _buildPendingApprovals({required bool isMobile}) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('pending_approvals').where('status', isEqualTo: 'pending').snapshots(),
@@ -457,7 +467,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
               children: [
                 Icon(Icons.done_all_rounded, size: 40, color: _secondaryTextColor),
                 const SizedBox(height: 8),
-                Text("Verification queue clean!", style: TextStyle(color: _primaryTextColor)),
+                Text("Verification queue completely clear!", style: TextStyle(color: _primaryTextColor)),
               ],
             ),
           );
@@ -510,42 +520,51 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- 4. REAL-TIME LIVE MESSAGING INTERFACE ---
-  Widget _buildMessagingCenter({required bool isMobile}) {
-    return Column(
+  // --- 4. ADVANCED UPGRADED 1-ON-1 CHAT MESSAGING CENTER ---
+  Widget _buildLiveMessagingCenter({required bool isMobile}) {
+    return Row(
       children: [
-        Expanded(
+        // Left Column: User Selection Thread Directory
+        Container(
+          width: isMobile ? 120 : 250,
+          decoration: BoxDecoration(
+            border: Border(right: BorderSide(color: _borderColor)),
+          ),
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('admin_messages').orderBy('timestamp', descending: true).snapshots(),
+            stream: FirebaseFirestore.instance.collection('users').snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              var messages = snapshot.data!.docs;
-
-              if (messages.isEmpty) {
-                return Center(child: Text("No live dynamic logs here.", style: TextStyle(color: _secondaryTextColor)));
-              }
+              var users = snapshot.data!.docs;
 
               return ListView.builder(
-                reverse: true,
-                padding: const EdgeInsets.all(16),
-                itemCount: messages.length,
+                itemCount: users.length,
                 itemBuilder: (context, index) {
-                  var data = messages[index].data() as Map<String, dynamic>;
-                  bool isAdmin = data['direction'] == 'from_admin';
+                  var userData = users[index].data() as Map<String, dynamic>;
+                  String uid = users[index].id;
+                  bool isSelected = _selectedChatUser != null && _selectedChatUser!['uid'] == uid;
 
-                  return Align(
-                    alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isAdmin ? _accentColor : (_isDarkMode ? Colors.grey[800] : Colors.grey[300]),
-                        borderRadius: BorderRadius.circular(12),
+                  return Container(
+                    color: isSelected ? _accentColor.withOpacity(0.12) : Colors.transparent,
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: _accentColor.withOpacity(0.2),
+                        child: Text((userData['name'] ?? 'U')[0].toUpperCase(), style: TextStyle(color: _accentColor, fontSize: 12)),
                       ),
-                      child: Text(
-                        data['message'] ?? '',
-                        style: TextStyle(color: isAdmin ? Colors.white : _primaryTextColor),
-                      ),
+                      title: isMobile 
+                        ? const SizedBox() 
+                        : Text(userData['name'] ?? 'User Thread', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, overflow: TextOverflow.ellipsis)),
+                      subtitle: isMobile 
+                        ? const SizedBox() 
+                        : Text(userData['role'] ?? 'Client', style: TextStyle(color: _secondaryTextColor, fontSize: 11)),
+                      onTap: () {
+                        setState(() {
+                          _selectedChatUser = userData;
+                          _selectedChatUser!['uid'] = uid;
+                        });
+                      },
                     ),
                   );
                 },
@@ -553,55 +572,164 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
             },
           ),
         ),
-        Container(
-          padding: const EdgeInsets.all(12),
-          color: _cardColor,
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  style: TextStyle(color: _primaryTextColor),
-                  decoration: const InputDecoration(hintText: "Type live message...", border: InputBorder.none),
+
+        // Right Column: Target Chat Room Feed Frame
+        Expanded(
+          child: _selectedChatUser == null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.chat_bubble_outline_rounded, size: 44, color: _secondaryTextColor),
+                      const SizedBox(height: 12),
+                      Text("Select a profile client from directory to chat", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    // Chat Header Profile Label
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _borderColor)), color: _cardColor),
+                      child: Row(
+                        children: [
+                          Icon(Icons.circle, color: Colors.green, size: 10),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Chatting with: ${_selectedChatUser!['name'] ?? 'Client Support'}",
+                            style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Real-time Chat Thread filtering via user scope constraints
+                    Expanded(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('admin_messages')
+                            .where('userId', isEqualTo: _selectedChatUser!['uid'])
+                            .orderBy('timestamp', descending: true)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                          var messages = snapshot.data!.docs;
+
+                          if (messages.isEmpty) {
+                            return Center(child: Text("No conversation history logs with this user yet.", style: TextStyle(color: _secondaryTextColor, fontSize: 12)));
+                          }
+
+                          return ListView.builder(
+                            reverse: true,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              var data = messages[index].data() as Map<String, dynamic>;
+                              bool isAdmin = data['direction'] == 'from_admin';
+
+                              return Align(
+                                alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  constraints: const BoxConstraints(maxWidth: 280),
+                                  decoration: BoxDecoration(
+                                    color: isAdmin ? _accentColor : (_isDarkMode ? Colors.grey[800] : Colors.grey[200]),
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(14),
+                                      topRight: const Radius.circular(14),
+                                      bottomLeft: isAdmin ? const Radius.circular(14) : const Radius.circular(0),
+                                      bottomRight: isAdmin ? const Radius.circular(0) : const Radius.circular(14),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    data['message'] ?? '',
+                                    style: TextStyle(color: isAdmin ? Colors.white : _primaryTextColor, fontSize: 13),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    // Input Message Bar Frame Panel
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      color: _cardColor,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _messageController,
+                              style: TextStyle(color: _primaryTextColor, fontSize: 13),
+                              decoration: const InputDecoration(hintText: "Type private targeted support reply...", border: InputBorder.none),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.send_rounded, color: _accentColor),
+                            onPressed: _sendTargetedMessage,
+                          )
+                        ],
+                      ),
+                    )
+                  ],
                 ),
-              ),
-              IconButton(
-                icon: Icon(Icons.send, color: _accentColor),
-                onPressed: _sendMessage,
-              )
-            ],
-          ),
         )
       ],
     );
   }
 
-  // --- 5. GLOBAL BROADCAST SYSTEM ---
-  Widget _buildAnnouncements({required bool isMobile}) {
+  // --- 5. BROADCAST ANNOUNCEMENTS SYSTEMS ---
+  Widget _buildAnnouncementsHub({required bool isMobile}) {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(24.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text("Compose System Announcement", style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text("Target Demographics: ", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
+              const SizedBox(width: 12),
+              DropdownButton<String>(
+                value: _broadcastTarget,
+                dropdownColor: _cardColor,
+                style: TextStyle(color: _primaryTextColor),
+                items: <String>['All', 'Vendor', 'Customer'].map((String value) {
+                  return DropdownMenuItem<String>(value: value, child: Text(value));
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() => _broadcastTarget = newValue!);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _announcementController,
+            maxLines: 3,
             style: TextStyle(color: _primaryTextColor),
             decoration: InputDecoration(
-              hintText: "Post global dynamic announcement...",
-              hintStyle: TextStyle(color: _secondaryTextColor),
+              hintText: "Write systemic message content broadcast dispatch updates...",
+              hintStyle: TextStyle(color: _secondaryTextColor, fontSize: 13),
               enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
               focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentColor)),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _accentColor),
+              style: ElevatedButton.styleFrom(backgroundColor: _accentColor, padding: const EdgeInsets.all(14)),
               onPressed: _postAnnouncement,
-              child: const Text("Broadcast Live", style: TextStyle(color: Colors.white)),
+              child: const Text("Broadcast Live to Audience Cluster", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
+          Text("Dispatched Global Alerts Stream Log", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _primaryTextColor)),
+          const SizedBox(height: 12),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('announcements').orderBy('timestamp', descending: true).snapshots(),
@@ -610,18 +738,27 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                 var list = snapshot.data!.docs;
 
                 if (list.isEmpty) {
-                  return Center(child: Text("No history of global alerts.", style: TextStyle(color: _secondaryTextColor)));
+                  return Center(child: Text("No history of global alerts tracked.", style: TextStyle(color: _secondaryTextColor)));
                 }
 
                 return ListView.builder(
                   itemCount: list.length,
                   itemBuilder: (context, i) {
                     var data = list[i].data() as Map<String, dynamic>;
-                    return ListTile(
-                      title: Text(data['message'] ?? '', style: TextStyle(color: _primaryTextColor)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, size: 16, color: Colors.grey),
-                        onPressed: () => FirebaseFirestore.instance.collection('announcements').doc(list[i].id).delete(),
+                    String audience = data['targetAudience'] ?? 'All';
+
+                    return Card(
+                      color: _cardColor,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      shape: RoundedRectangleBorder(side: BorderSide(color: _borderColor), borderRadius: BorderRadius.circular(8)),
+                      child: ListTile(
+                        dense: true,
+                        title: Text(data['message'] ?? '', style: TextStyle(color: _primaryTextColor)),
+                        subtitle: Text("Audience Segment Scope: $audience", style: TextStyle(color: _accentColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+                          onPressed: () => FirebaseFirestore.instance.collection('announcements').doc(list[i].id).delete(),
+                        ),
                       ),
                     );
                   },
@@ -629,12 +766,12 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
               },
             ),
           )
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      );
+    }
 
-  // --- REALTIME SUB-LIST LISTENER ---
+  // --- HELPER METRIC RECENT REGISTRATION LOGS ---
   Widget _buildRealtimeRecentActivityList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('users').orderBy('createdAt', descending: true).limit(5).snapshots(),
@@ -646,7 +783,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
           return Container(
             padding: const EdgeInsets.all(16),
             alignment: Alignment.center,
-            child: Text("No new signups recorded.", style: TextStyle(color: _secondaryTextColor)),
+            child: Text("No new profile system registration nodes tracked.", style: TextStyle(color: _secondaryTextColor)),
           );
         }
 
@@ -673,9 +810,13 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  void _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
+  // --- PERSISTENCE WRITERS INTERACTION METHOD DATA ENGINES ---
+  void _sendTargetedMessage() async {
+    if (_messageController.text.trim().isEmpty || _selectedChatUser == null) return;
+    
+    // Writes directly to your current 'admin_messages' root collection securely mapped with unique contextual indices
     await FirebaseFirestore.instance.collection('admin_messages').add({
+      'userId': _selectedChatUser!['uid'],
       'message': _messageController.text.trim(),
       'timestamp': FieldValue.serverTimestamp(),
       'direction': 'from_admin',
@@ -685,8 +826,11 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
 
   void _postAnnouncement() async {
     if (_announcementController.text.trim().isEmpty) return;
+    
+    // Writes directly to your current 'announcements' collection appending metadata properties dynamically
     await FirebaseFirestore.instance.collection('announcements').add({
       'message': _announcementController.text.trim(),
+      'targetAudience': _broadcastTarget,
       'timestamp': FieldValue.serverTimestamp(),
     });
     _announcementController.clear();
@@ -718,7 +862,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: _cardColor,
         title: Text("Log Out?", style: TextStyle(color: _primaryTextColor, fontSize: 16)),
-        content: Text("Do you really want to close the dashboard session?", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
+        content: Text("Do you really want to close the administrator console engine session?", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("No")),
           TextButton(onPressed: () => _signOut(), child: const Text("Yes, Log Out")),

@@ -14,7 +14,26 @@ class RealTimeChatScreen extends StatefulWidget {
 class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   String? _selectedSalonId;
+  String? _selectedSalonName;
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,25 +41,40 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0,
+        elevation: 0.5,
         title: Text(
-          "Messages",
+          _selectedSalonId == null ? "Messages" : _selectedSalonName ?? "Chat",
           style: GoogleFonts.poppins(
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: FontWeight.w600,
             color: const Color(0xFF1A1A1A),
           ),
         ),
+        leading: _selectedSalonId != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+                onPressed: () {
+                  setState(() {
+                    _selectedSalonId = null;
+                    _selectedSalonName = null;
+                  });
+                },
+              )
+            : null,
       ),
       body: Row(
         children: [
-          // Salon List
+          // Salon Directory Side Navigation Panel
           Container(
-            width: 120,
-            color: Colors.white,
+            width: 130,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(right: BorderSide(color: Colors.grey.withOpacity(0.1))),
+            ),
             child: _buildSalonList(),
           ),
-          // Chat Area
+          
+          // Private Messaging Matrix Area
           Expanded(
             child: _selectedSalonId == null
                 ? _buildNoChatSelected()
@@ -63,7 +97,17 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
       stream: FirebaseFirestore.instance.collection('salons').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFF2845C)));
+        }
+
+        if (snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Text(
+              "No Salons\nAvailable",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(color: Colors.grey, fontSize: 12),
+            ),
+          );
         }
 
         return ListView.builder(
@@ -71,44 +115,49 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
           itemBuilder: (context, index) {
             var salon = snapshot.data!.docs[index];
             var data = salon.data() as Map<String, dynamic>;
+            String salonName = data['name'] ?? 'Salon Business';
+            bool isSelected = _selectedSalonId == salon.id;
 
             return GestureDetector(
               onTap: () {
                 setState(() {
                   _selectedSalonId = salon.id;
+                  _selectedSalonName = salonName;
                 });
               },
-              child: Container(
-                padding: const EdgeInsets.all(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: _selectedSalonId == salon.id
-                      ? const Color(0xFFFDEEE9)
-                      : Colors.transparent,
+                  color: isSelected ? const Color(0xFFFDEEE9) : Colors.transparent,
                   border: Border(
                     left: BorderSide(
-                      color: _selectedSalonId == salon.id
-                          ? const Color(0xFFF2845C)
-                          : Colors.transparent,
-                      width: 3,
+                      color: isSelected ? const Color(0xFFF2845C) : Colors.transparent,
+                      width: 3.5,
                     ),
                   ),
                 ),
                 child: Column(
                   children: [
                     CircleAvatar(
-                      radius: 30,
-                      backgroundColor: const Color(0xFFF2845C),
+                      radius: 26,
+                      backgroundColor: isSelected ? const Color(0xFFF2845C) : const Color(0xFFE2E8F0),
                       child: Text(
-                        (data['name']?[0] ?? 'S').toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 20),
+                        salonName.isNotEmpty ? salonName[0].toUpperCase() : 'S',
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : const Color(0xFF4A5568),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      data['name'] ?? 'Salon',
+                      salonName,
                       style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected ? const Color(0xFFF2845C) : const Color(0xFF2D3748),
                       ),
                       textAlign: TextAlign.center,
                       maxLines: 2,
@@ -129,13 +178,15 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey[400]),
+          Icon(Icons.chat_bubble_outline, size: 70, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text(
-            "Select a salon to start chatting",
+            "Select a professional salon\nto view your private inbox thread",
+            textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
-              color: Colors.grey[600],
-              fontSize: 16,
+              color: Colors.grey[500],
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -144,18 +195,19 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
   }
 
   Widget _buildChatMessages() {
-    if (_selectedSalonId == null) return const SizedBox();
+    if (_selectedSalonId == null || user == null) return const SizedBox();
 
+    // Isolated secure stream query bound to this exact customer UID and target business workspace
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('chats')
           .where('salonId', isEqualTo: _selectedSalonId)
-          .where('userId', isEqualTo: user?.uid)
+          .where('userId', isEqualTo: user!.uid)
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator(color: Color(0xFFF2845C)));
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -163,79 +215,83 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.message_outlined, size: 60, color: Colors.grey[400]),
-                const SizedBox(height: 16),
+                Icon(Icons.forum_outlined, size: 50, color: Colors.grey[300]),
+                const SizedBox(height: 12),
                 Text(
-                  "No messages yet",
-                  style: GoogleFonts.poppins(
-                    color: Colors.grey[600],
-                  ),
+                  "No past logs found with this brand.",
+                  style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 13),
                 ),
                 Text(
-                  "Start a conversation!",
-                  style: GoogleFonts.poppins(
-                    color: Colors.grey[500],
-                    fontSize: 14,
-                  ),
+                  "Send an inquiry message directly to the owner below!",
+                  style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 11),
                 ),
               ],
             ),
           );
         }
 
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+
         return ListView.builder(
+          controller: _scrollController,
           padding: const EdgeInsets.all(16),
           reverse: true,
           itemCount: snapshot.data!.docs.length,
           itemBuilder: (context, index) {
             var msg = snapshot.data!.docs[index];
             var data = msg.data() as Map<String, dynamic>;
-            bool isMe = data['senderId'] == user?.uid;
+            bool isMe = data['senderId'] == user!.uid;
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
               child: Row(
                 mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (!isMe)
-                    Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      child: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: const Color(0xFFF2845C),
-                        child: const Icon(Icons.store, size: 16, color: Colors.white),
-                      ),
+                  if (!isMe) ...[
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: const Color(0xFFF2845C).withOpacity(0.1),
+                      child: const Icon(Icons.store, size: 14, color: Color(0xFFF2845C)),
                     ),
+                    const SizedBox(width: 6),
+                  ],
                   Flexible(
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         color: isMe ? const Color(0xFFF2845C) : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(16),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: Radius.circular(isMe ? 16 : 2),
+                          bottomRight: Radius.circular(isMe ? 2 : 16),
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 5,
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
                       child: Text(
                         data['message'] ?? '',
                         style: GoogleFonts.poppins(
-                          color: isMe ? Colors.white : Colors.black87,
+                          color: isMe ? Colors.white : const Color(0xFF2D3748),
+                          fontSize: 13.5,
                         ),
                       ),
                     ),
                   ),
-                  if (isMe)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      child: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[300],
-                        child: const Icon(Icons.person, size: 16, color: Colors.grey),
-                      ),
+                  if (isMe) ...[
+                    const SizedBox(width: 6),
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Colors.grey[200],
+                      child: const Icon(Icons.person, size: 14, color: Color(0xFF718096)),
                     ),
+                  ]
                 ],
               ),
             );
@@ -247,62 +303,63 @@ class _RealTimeChatScreenState extends State<RealTimeChatScreen> {
 
   Widget _buildMessageInput() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
+        border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              decoration: InputDecoration(
-                hintText: "Type a message...",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _messageController,
+                style: GoogleFonts.poppins(fontSize: 14),
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: "Inquire about booking slots or styling options...",
+                  hintStyle: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12.5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF1F3F4),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
-                filled: true,
-                fillColor: const Color(0xFFF1F3F4),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFF2845C),
-              shape: BoxShape.circle,
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: _sendMessage,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF2845C),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.send, color: Colors.white, size: 18),
+              ),
             ),
-            child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white),
-              onPressed: _sendMessage,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   void _sendMessage() async {
-    if (_messageController.text.trim().isEmpty || _selectedSalonId == null) return;
+    final securedText = _messageController.text.trim();
+    if (securedText.isEmpty || _selectedSalonId == null || user == null) return;
+
+    _messageController.clear();
 
     await FirebaseFirestore.instance.collection('chats').add({
       'salonId': _selectedSalonId,
-      'userId': user?.uid,
-      'senderId': user?.uid,
-      'message': _messageController.text,
+      'userId': user!.uid,        // Pairs this conversation strictly with this Customer account
+      'senderId': user!.uid,      // Explicit tracking tag showing the customer initialized/wrote this specific node
+      'message': securedText,
       'timestamp': FieldValue.serverTimestamp(),
       'read': false,
     });
-
-    _messageController.clear();
   }
 }
