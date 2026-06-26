@@ -1,4 +1,5 @@
 // lib/screens/customer/customer_dashboard.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,13 +9,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'nearby_salons.dart';
 import 'booking_calendar.dart';
 import 'real_time_chat.dart';
-
-// Extended Feature Hub Modules
-import 'virtual_makeup_screen.dart';
+// AR Feature Hub Modules (Updated paths)
+import 'ar_try_on_suite.dart';
+import 'ar_makeup_screen.dart';
 import 'ai_advisor_screen.dart';
 import 'product_shop.dart';
 import 'loyalty_screen.dart';
 import '../signin_screen.dart';
+import 'inbox_screen.dart';
 
 class CustomerDashboard extends StatefulWidget {
   const CustomerDashboard({super.key});
@@ -34,7 +36,7 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
       const DashboardHomeView(),
       const NearbySalonsScreen(),
       const BookingCalendarScreen(),
-      const RealTimeChatScreen(),
+      const InboxScreen(),
     ];
   }
 
@@ -264,7 +266,6 @@ class DashboardHomeView extends StatelessWidget {
                                 color: const Color(0xFFF2845C).withOpacity(0.2),
                                 shape: BoxShape.circle,
                               ),
-                              // FIXED: Replaced auto_stars_rounded with auto_awesome to resolve undefined getter error
                               child: const Icon(Icons.auto_awesome, color: Color(0xFFF2845C), size: 24),
                             )
                           ],
@@ -290,14 +291,14 @@ class DashboardHomeView extends StatelessWidget {
                               icon: Icons.face_retouching_natural_rounded,
                               color: const Color(0xFF1A2A3A),
                               iconColor: const Color(0xFF4CA6FF),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArTryOnSuiteScreen())),
                             ),
                             _buildInnerHeroTile(
                               label: "Live AR",
                               icon: Icons.videocam_rounded,
                               color: const Color(0xFF351A2A),
                               iconColor: const Color(0xFFFF4C93),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArMakeupScreen())),
                             ),
                             _buildInnerHeroTile(
                               label: "Explore",
@@ -374,7 +375,7 @@ class DashboardHomeView extends StatelessWidget {
                           title: "Face & Chromatic Makeup Matrix",
                           subtitle: "Lipstick, Eye Shadow & Foundation parameters",
                           icon: Icons.face,
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArMakeupScreen())),
                           isDark: isDarkMode,
                         ),
                         _buildPipelineHorizontalCard(
@@ -382,7 +383,7 @@ class DashboardHomeView extends StatelessWidget {
                           title: "Premium Bridal Look Architect",
                           subtitle: "Complete virtual styling customization engine",
                           icon: Icons.auto_awesome_motion,
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArTryOnSuiteScreen())),
                           isDark: isDarkMode,
                         ),
                       ],
@@ -433,10 +434,10 @@ class DashboardHomeView extends StatelessWidget {
                         isDark: isDarkMode,
                       ),
                       _buildQuickActionCircle(
-                        label: "AR Try-On",
+                        label: "AR Studio",
                         icon: Icons.camera_front_rounded,
                         color: const Color(0xFF29B6F6),
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArTryOnSuiteScreen())),
                         isDark: isDarkMode,
                       ),
                       _buildQuickActionCircle(
@@ -559,7 +560,6 @@ class DashboardHomeView extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               title,
-              // FIXED: Changed parameter format to valid named argument usage pattern
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(fontSize: 10, color: const Color(0xFF7E7E8E), fontWeight: FontWeight.w500),
             ),
@@ -587,7 +587,6 @@ class DashboardHomeView extends StatelessWidget {
           BoxShadow(color: Colors.black.withOpacity(isDark ? 0.15 : 0.04), blurRadius: 8, offset: const Offset(0, 3))
         ],
       ),
-      // FIXED: Removed the stray asterisk multiplication operator symbol assignment sequence entirely
       child: Material(
         color: Colors.transparent,
         child: ListTile(
@@ -674,17 +673,16 @@ class DashboardHomeView extends StatelessWidget {
 }
 
 // =========================================================================
-// SAFE TEMPORARY FALLBACK CLASSES FOR UNRESOLVED IMPORTS
-// Remove or comment these out once you create the actual module screen files!
+// FALLBACK CLASSES - Replace with actual implementations
 // =========================================================================
 class ServicesMenuScreen extends StatelessWidget {
   const ServicesMenuScreen({super.key});
   @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Services Menu Screen Placeholder")));
+  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Services Menu Screen")));
 }
 
 class WaitlistScreen extends StatelessWidget {
   const WaitlistScreen({super.key});
   @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Waitlist Screen Placeholder")));
+  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Waitlist Screen")));
 }

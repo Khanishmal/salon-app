@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'signin_screen.dart'; 
 import 'vendor/vendor_screen.dart'; 
-import 'customer/virtual_makeup_screen.dart'; // Ensure this matches your project directory path
+import 'customer/ar_makeup_screen.dart'; // Ensure this matches your project directory path
 
 class GlowSalonDashboard extends StatelessWidget {
   const GlowSalonDashboard({super.key});
@@ -241,7 +241,7 @@ class GlowSalonDashboard extends StatelessWidget {
           if (title == 'Makeup') {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const VirtualMakeupScreen()),
+              MaterialPageRoute(builder: (context) => const ArMakeupScreen()),
             );
           }
         },

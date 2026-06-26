@@ -20,14 +20,23 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
   // Controllers for messaging and announcements
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _announcementController = TextEditingController();
+  final TextEditingController _announcementTitleController = TextEditingController();
   
   // Track selected active customer/user for 1-on-1 live chat support
   Map<String, dynamic>? _selectedChatUser;
-  String _broadcastTarget = 'All'; // Target population filter
+  String _broadcastTarget = 'All';
+  
+  // Cache messages to prevent flickering
+  List<QueryDocumentSnapshot> _cachedMessages = [];
+  String? _currentAdminId;
+  
+  // Search for users in chat list
+  String _userSearchQuery = '';
 
   @override
   void initState() {
     super.initState();
+    _currentAdminId = FirebaseAuth.instance.currentUser?.uid;
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.toLowerCase();
@@ -40,6 +49,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     _searchController.dispose();
     _messageController.dispose();
     _announcementController.dispose();
+    _announcementTitleController.dispose();
     super.dispose();
   }
 
@@ -49,7 +59,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
   Color get _primaryTextColor => _isDarkMode ? Colors.white : const Color(0xFF1A1A1A);
   Color get _secondaryTextColor => _isDarkMode ? Colors.grey[400]! : Colors.grey[600]!;
   Color get _borderColor => _isDarkMode ? const Color(0xFF2D2D2D) : const Color(0xFFEAE6DF);
-  Color get _accentColor => const Color(0xFFE28766); // Premium Accent Gold
+  Color get _accentColor => const Color(0xFFE28766);
 
   @override
   Widget build(BuildContext context) {
@@ -61,11 +71,11 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
           canPop: false,
           onPopInvokedWithResult: (didPop, result) {
             if (didPop) return;
-            // Instantly moves back to Dashboard Overview default screen instead of popping
             if (_activeTab != 0) {
               setState(() {
                 _activeTab = 0;
-                _selectedChatUser = null; // Reset selection state
+                _selectedChatUser = null;
+                _cachedMessages = [];
               });
             } else {
               _showLogoutConfirmation();
@@ -100,15 +110,6 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-            floatingActionButton: FloatingActionButton(
-              onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
-              backgroundColor: _accentColor,
-              mini: true,
-              child: Icon(
-                _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                color: Colors.white,
               ),
             ),
           ),
@@ -182,7 +183,10 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
             : () {
                 setState(() {
                   _activeTab = index;
-                  if (index != 5) _selectedChatUser = null; // clear conversation window context
+                  if (index != 5) {
+                    _selectedChatUser = null;
+                    _cachedMessages = [];
+                  }
                 });
                 if (isMobile) Navigator.pop(context);
               },
@@ -238,6 +242,14 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 ),
               ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _isDarkMode = !_isDarkMode),
+            icon: Icon(
+              _isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+              color: _primaryTextColor,
+              size: 22,
             ),
           ),
           _buildTopBarBadge(
@@ -322,8 +334,17 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
               childAspectRatio: isMobile ? 1.4 : 1.6,
               children: [
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('users').snapshots(),
-                  builder: (context, snap) => _analyticsCard("Total Profiles", snap.hasData ? snap.data!.docs.length.toString() : "0", Icons.people, Colors.blue, () => setState(() => _activeTab = 1)),
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .where('role', whereIn: ['Customer', 'Vendor'])
+                      .snapshots(),
+                  builder: (context, snap) => _analyticsCard(
+                    "Total Users",
+                    snap.hasData ? snap.data!.docs.length.toString() : "0",
+                    Icons.people,
+                    Colors.blue,
+                    () => setState(() => _activeTab = 1),
+                  ),
                 ),
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Vendor').snapshots(),
@@ -386,16 +407,46 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
 
   // --- 2. COMPLETE USER PROFILE DIRECTORY MANAGEMENT ---
   Widget _buildUserManagement(String filter, {required bool isMobile}) {
+    final String? adminId = FirebaseAuth.instance.currentUser?.uid;
+    
     Query query = FirebaseFirestore.instance.collection('users');
-    if (filter != 'All') {
-      query = query.where('role', isEqualTo: filter);
+    
+    if (filter == 'All') {
+      query = query.where('role', whereIn: ['Customer', 'Vendor']);
+    } else if (filter == 'Vendor') {
+      query = query.where('role', isEqualTo: 'Vendor');
+    } else if (filter == 'Customer') {
+      query = query.where('role', isEqualTo: 'Customer');
     }
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        var docs = snapshot.data!.docs;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
+                const SizedBox(height: 12),
+                Text(
+                  "Error loading users",
+                  style: TextStyle(color: _secondaryTextColor),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        var docs = snapshot.data!.docs.where((doc) => doc.id != adminId).toList();
 
         if (_searchQuery.isNotEmpty) {
           docs = docs.where((d) {
@@ -406,7 +457,19 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
         }
 
         if (docs.isEmpty) {
-          return Center(child: Text("No user profile records found matches.", style: TextStyle(color: _secondaryTextColor)));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_outline, size: 40, color: _secondaryTextColor),
+                const SizedBox(height: 8),
+                Text(
+                  "No users found",
+                  style: TextStyle(color: _secondaryTextColor, fontSize: 13),
+                ),
+              ],
+            ),
+          );
         }
 
         return ListView.builder(
@@ -416,10 +479,14 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
             var doc = docs[index];
             var data = doc.data() as Map<String, dynamic>;
             bool isActive = data['isActive'] ?? true;
+            String role = data['role'] ?? 'User';
 
             return Card(
               color: _cardColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _borderColor)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: _borderColor),
+              ),
               margin: const EdgeInsets.only(bottom: 10),
               child: ListTile(
                 leading: CircleAvatar(
@@ -429,14 +496,49 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
                     style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold),
                   ),
                 ),
-                title: Text(data['name'] ?? 'No Registered Name', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold)),
-                subtitle: Text("${data['email'] ?? ''} • [${data['role'] ?? 'User'}]", style: TextStyle(color: _secondaryTextColor, fontSize: 12)),
+                title: Text(
+                  data['name'] ?? 'No Registered Name',
+                  style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold),
+                ),
+                subtitle: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: role == 'Vendor' 
+                            ? Colors.green.withOpacity(0.1) 
+                            : Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        role,
+                        style: TextStyle(
+                          color: role == 'Vendor' ? Colors.green[700] : Colors.blue[700],
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      data['email'] ?? '',
+                      style: TextStyle(color: _secondaryTextColor, fontSize: 12),
+                    ),
+                  ],
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: Icon(isActive ? Icons.block : Icons.check_circle, color: isActive ? Colors.red : Colors.green, size: 20),
-                      onPressed: () => FirebaseFirestore.instance.collection('users').doc(doc.id).update({'isActive': !isActive}),
+                      icon: Icon(
+                        isActive ? Icons.block : Icons.check_circle,
+                        color: isActive ? Colors.red : Colors.green,
+                        size: 20,
+                      ),
+                      onPressed: () => FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(doc.id)
+                          .update({'isActive': !isActive}),
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
@@ -520,175 +622,1122 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- 4. ADVANCED UPGRADED 1-ON-1 CHAT MESSAGING CENTER ---
+  // --- 4. IMPROVED LIVE MESSAGING CENTER ---
   Widget _buildLiveMessagingCenter({required bool isMobile}) {
+    final String? adminId = FirebaseAuth.instance.currentUser?.uid;
+
+    return isMobile ? _buildMobileChatView(adminId) : _buildDesktopChatView(adminId);
+  }
+
+  // --- DESKTOP CHAT VIEW ---
+  Widget _buildDesktopChatView(String? adminId) {
     return Row(
       children: [
-        // Left Column: User Selection Thread Directory
         Container(
-          width: isMobile ? 120 : 250,
+          width: 280,
           decoration: BoxDecoration(
             border: Border(right: BorderSide(color: _borderColor)),
           ),
+          child: _buildUserList(adminId, isMobile: false),
+        ),
+        Expanded(
+          child: _selectedChatUser == null
+              ? _buildNoChatSelected()
+              : _buildChatArea(isMobile: false),
+        ),
+      ],
+    );
+  }
+
+  // --- MOBILE CHAT VIEW ---
+  Widget _buildMobileChatView(String? adminId) {
+    if (_selectedChatUser != null) {
+      return Column(
+        children: [
+          // Mobile Chat Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _cardColor,
+              border: Border(bottom: BorderSide(color: _borderColor)),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.arrow_back, color: _primaryTextColor),
+                  onPressed: () {
+                    setState(() {
+                      _selectedChatUser = null;
+                      _cachedMessages = [];
+                    });
+                  },
+                ),
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: _accentColor.withOpacity(0.2),
+                  child: Text(
+                    (_selectedChatUser!['name'] ?? 'U')[0].toUpperCase(),
+                    style: TextStyle(color: _accentColor, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _selectedChatUser!['name'] ?? 'User',
+                        style: TextStyle(
+                          color: _primaryTextColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        _selectedChatUser!['role'] ?? 'User',
+                        style: TextStyle(
+                          color: _secondaryTextColor,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.delete_sweep, color: Colors.red[400], size: 20),
+                  onPressed: () => _confirmDeleteAllMessages(_selectedChatUser!['uid']),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _buildChatMessages(),
+          ),
+          _buildMessageInput(isMobile: true),
+        ],
+      );
+    }
+
+    return _buildUserList(adminId, isMobile: true);
+  }
+
+  // --- BUILD USER LIST ---
+  Widget _buildUserList(String? adminId, {required bool isMobile}) {
+    return Column(
+      children: [
+        if (isMobile) ...[
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: _isDarkMode ? const Color(0xFF222222) : const Color(0xFFF0EFFB),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: TextField(
+                style: TextStyle(fontSize: 13, color: _primaryTextColor),
+                decoration: InputDecoration(
+                  hintText: "Search users...",
+                  hintStyle: TextStyle(color: _secondaryTextColor, fontSize: 12),
+                  prefixIcon: Icon(Icons.search_rounded, color: _accentColor, size: 16),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _userSearchQuery = value.toLowerCase();
+                  });
+                },
+              ),
+            ),
+          ),
+        ],
+        Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('users').snapshots(),
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .where('role', whereIn: ['Customer', 'Vendor'])
+                .snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              var users = snapshot.data!.docs;
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Error loading users",
+                        style: TextStyle(color: _secondaryTextColor, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline, size: 40, color: _secondaryTextColor),
+                      const SizedBox(height: 8),
+                      Text(
+                        "No users found",
+                        style: TextStyle(color: _secondaryTextColor, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              var users = snapshot.data!.docs.where((doc) => doc.id != adminId).toList();
+
+              if (_userSearchQuery.isNotEmpty) {
+                users = users.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  String name = (data['name'] ?? '').toString().toLowerCase();
+                  return name.contains(_userSearchQuery);
+                }).toList();
+              }
+
+              if (users.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_off, size: 40, color: _secondaryTextColor),
+                      const SizedBox(height: 8),
+                      Text(
+                        "No users found",
+                        style: TextStyle(color: _secondaryTextColor, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                );
+              }
 
               return ListView.builder(
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 4 : 8),
                 itemCount: users.length,
                 itemBuilder: (context, index) {
-                  var userData = users[index].data() as Map<String, dynamic>;
-                  String uid = users[index].id;
+                  var userDoc = users[index];
+                  var userData = userDoc.data() as Map<String, dynamic>;
+                  String uid = userDoc.id;
                   bool isSelected = _selectedChatUser != null && _selectedChatUser!['uid'] == uid;
+                  String role = userData['role'] ?? 'User';
 
-                  return Container(
-                    color: isSelected ? _accentColor.withOpacity(0.12) : Colors.transparent,
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      leading: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _accentColor.withOpacity(0.2),
-                        child: Text((userData['name'] ?? 'U')[0].toUpperCase(), style: TextStyle(color: _accentColor, fontSize: 12)),
-                      ),
-                      title: isMobile 
-                        ? const SizedBox() 
-                        : Text(userData['name'] ?? 'User Thread', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, overflow: TextOverflow.ellipsis)),
-                      subtitle: isMobile 
-                        ? const SizedBox() 
-                        : Text(userData['role'] ?? 'Client', style: TextStyle(color: _secondaryTextColor, fontSize: 11)),
-                      onTap: () {
-                        setState(() {
-                          _selectedChatUser = userData;
-                          _selectedChatUser!['uid'] = uid;
-                        });
-                      },
-                    ),
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('chat_messages')
+                        .where('participants', arrayContains: uid)
+                        .where('read', isEqualTo: false)
+                        .where('isAdminMessage', isEqualTo: false)
+                        .snapshots(),
+                    builder: (context, unreadSnapshot) {
+                      int unreadCount = unreadSnapshot.hasData ? unreadSnapshot.data!.docs.length : 0;
+                      
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isSelected ? _accentColor.withOpacity(0.12) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 8 : 12,
+                            vertical: 2,
+                          ),
+                          leading: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: isMobile ? 18 : 20,
+                                backgroundColor: _accentColor.withOpacity(0.2),
+                                child: Text(
+                                  (userData['name'] ?? 'U')[0].toUpperCase(),
+                                  style: TextStyle(
+                                    color: _accentColor,
+                                    fontSize: isMobile ? 12 : 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              if (unreadCount > 0)
+                                Positioned(
+                                  right: -2,
+                                  top: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      unreadCount.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          title: Text(
+                            userData['name'] ?? 'User',
+                            style: TextStyle(
+                              color: _primaryTextColor,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              fontSize: isMobile ? 13 : 14,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          subtitle: isMobile ? null : Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: role == 'Vendor' 
+                                      ? Colors.green.withOpacity(0.1) 
+                                      : Colors.blue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  role,
+                                  style: TextStyle(
+                                    color: role == 'Vendor' ? Colors.green[700] : Colors.blue[700],
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              if (unreadCount > 0) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    unreadCount.toString(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          trailing: isMobile && unreadCount > 0
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    unreadCount.toString(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedChatUser = userData;
+                              _selectedChatUser!['uid'] = uid;
+                              _cachedMessages = [];
+                              _markMessagesAsRead(uid);
+                            });
+                          },
+                        ),
+                      );
+                    },
                   );
                 },
               );
             },
           ),
         ),
-
-        // Right Column: Target Chat Room Feed Frame
-        Expanded(
-          child: _selectedChatUser == null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.chat_bubble_outline_rounded, size: 44, color: _secondaryTextColor),
-                      const SizedBox(height: 12),
-                      Text("Select a profile client from directory to chat", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
-                    ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    // Chat Header Profile Label
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _borderColor)), color: _cardColor),
-                      child: Row(
-                        children: [
-                          Icon(Icons.circle, color: Colors.green, size: 10),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Chatting with: ${_selectedChatUser!['name'] ?? 'Client Support'}",
-                            style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Real-time Chat Thread filtering via user scope constraints
-                    Expanded(
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('admin_messages')
-                            .where('userId', isEqualTo: _selectedChatUser!['uid'])
-                            .orderBy('timestamp', descending: true)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                          var messages = snapshot.data!.docs;
-
-                          if (messages.isEmpty) {
-                            return Center(child: Text("No conversation history logs with this user yet.", style: TextStyle(color: _secondaryTextColor, fontSize: 12)));
-                          }
-
-                          return ListView.builder(
-                            reverse: true,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: messages.length,
-                            itemBuilder: (context, index) {
-                              var data = messages[index].data() as Map<String, dynamic>;
-                              bool isAdmin = data['direction'] == 'from_admin';
-
-                              return Align(
-                                alignment: isAdmin ? Alignment.centerRight : Alignment.centerLeft,
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                  constraints: const BoxConstraints(maxWidth: 280),
-                                  decoration: BoxDecoration(
-                                    color: isAdmin ? _accentColor : (_isDarkMode ? Colors.grey[800] : Colors.grey[200]),
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: const Radius.circular(14),
-                                      topRight: const Radius.circular(14),
-                                      bottomLeft: isAdmin ? const Radius.circular(14) : const Radius.circular(0),
-                                      bottomRight: isAdmin ? const Radius.circular(0) : const Radius.circular(14),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    data['message'] ?? '',
-                                    style: TextStyle(color: isAdmin ? Colors.white : _primaryTextColor, fontSize: 13),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    // Input Message Bar Frame Panel
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      color: _cardColor,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              style: TextStyle(color: _primaryTextColor, fontSize: 13),
-                              decoration: const InputDecoration(hintText: "Type private targeted support reply...", border: InputBorder.none),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.send_rounded, color: _accentColor),
-                            onPressed: _sendTargetedMessage,
-                          )
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-        )
+        if (isMobile) ...[
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: _borderColor.withOpacity(0.3))),
+            ),
+            child: Text(
+              "Select a user to chat",
+              style: TextStyle(
+                color: _secondaryTextColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  // --- 5. BROADCAST ANNOUNCEMENTS SYSTEMS ---
+  // --- BUILD CHAT AREA ---
+  Widget _buildChatArea({required bool isMobile}) {
+    return Column(
+      children: [
+        // Chat Header
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: _borderColor)), 
+            color: _cardColor
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: _accentColor.withOpacity(0.2),
+                child: Text(
+                  (_selectedChatUser!['name'] ?? 'U')[0].toUpperCase(),
+                  style: TextStyle(color: _accentColor, fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectedChatUser!['name'] ?? 'User',
+                      style: TextStyle(
+                        color: _primaryTextColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      _selectedChatUser!['role'] ?? 'User',
+                      style: TextStyle(
+                        color: _secondaryTextColor,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_sweep, color: Colors.red[400], size: 20),
+                onPressed: () => _confirmDeleteAllMessages(_selectedChatUser!['uid']),
+                tooltip: "Delete all messages",
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _buildChatMessages(),
+        ),
+        _buildMessageInput(isMobile: isMobile),
+      ],
+    );
+  }
+
+  // --- BUILD NO CHAT SELECTED ---
+  Widget _buildNoChatSelected() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: _accentColor.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 56,
+                color: _accentColor.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              "No Conversation Selected",
+              style: TextStyle(
+                color: _primaryTextColor,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Select a user from the list to start chatting",
+              style: TextStyle(
+                color: _secondaryTextColor,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "You can chat with both customers and vendors",
+              style: TextStyle(
+                color: _secondaryTextColor.withOpacity(0.7),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- BUILD CHAT MESSAGES ---
+  Widget _buildChatMessages() {
+    return StreamBuilder<QuerySnapshot>(
+      key: ValueKey('chat_${_selectedChatUser?['uid'] ?? 'none'}'),
+      stream: FirebaseFirestore.instance
+          .collection('chat_messages')
+          .where('participants', arrayContains: _selectedChatUser!['uid'])
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE28766)),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Loading messages...",
+                  style: TextStyle(
+                    color: _secondaryTextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                const SizedBox(height: 16),
+                Text(
+                  "Error loading messages",
+                  style: TextStyle(
+                    color: _primaryTextColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.error.toString(),
+                  style: TextStyle(
+                    color: _secondaryTextColor,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() {}),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text("Retry"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accentColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: _accentColor.withOpacity(0.06),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.chat_bubble_outline,
+                    size: 48,
+                    color: _accentColor.withOpacity(0.4),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "No messages yet",
+                  style: TextStyle(
+                    color: _primaryTextColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Send a message to start the conversation",
+                  style: TextStyle(
+                    color: _secondaryTextColor,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _accentColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "💬 Say hello!",
+                    style: TextStyle(
+                      color: _accentColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        _cachedMessages = snapshot.data!.docs;
+
+        return ListView.builder(
+          reverse: true,
+          padding: const EdgeInsets.all(16),
+          itemCount: _cachedMessages.length,
+          itemBuilder: (context, index) {
+            var doc = _cachedMessages[index];
+            var data = doc.data() as Map<String, dynamic>;
+            String messageId = doc.id;
+            bool isAdmin = data['senderId'] == _currentAdminId;
+
+            return _buildMessageBubble(
+              data: data,
+              isAdmin: isAdmin,
+              messageId: messageId,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- BUILD MESSAGE BUBBLE (IMPROVED) ---
+  Widget _buildMessageBubble({
+    required Map<String, dynamic> data,
+    required bool isAdmin,
+    required String messageId,
+  }) {
+    final String message = data['message'] ?? '';
+    final bool isAdminMessage = data['isAdminMessage'] ?? false;
+    final bool isCustomerMessage = data['isCustomerMessage'] ?? false;
+    Timestamp? timestamp;
+    
+    if (data['timestamp'] != null && data['timestamp'] is Timestamp) {
+      timestamp = data['timestamp'] as Timestamp;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: isAdmin ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // User avatar (only for received messages)
+          if (!isAdmin) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: _accentColor.withOpacity(0.12),
+                child: Text(
+                  (_selectedChatUser!['name'] ?? 'U')[0].toUpperCase(),
+                  style: TextStyle(
+                    color: _accentColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          
+          // Message content
+          Flexible(
+            child: Column(
+              crossAxisAlignment: isAdmin ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  decoration: BoxDecoration(
+                    gradient: isAdmin
+                        ? LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              _accentColor,
+                              _accentColor.withOpacity(0.85),
+                            ],
+                          )
+                        : null,
+                    color: isAdmin ? null : (_isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFF1F1F1)),
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: isAdmin ? const Radius.circular(18) : const Radius.circular(4),
+                      bottomRight: isAdmin ? const Radius.circular(4) : const Radius.circular(18),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isAdmin ? 0.1 : 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: isAdmin ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message,
+                        style: TextStyle(
+                          color: isAdmin ? Colors.white : _primaryTextColor,
+                          fontSize: 14.5,
+                          height: 1.5,
+                          letterSpacing: 0.2,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            timestamp != null ? _formatTimestamp(timestamp!) : '',
+                            style: TextStyle(
+                              color: isAdmin 
+                                  ? Colors.white.withOpacity(0.7) 
+                                  : _secondaryTextColor.withOpacity(0.6),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          if (isAdmin) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.done_all,
+                              size: 14,
+                              color: Colors.white.withOpacity(0.5),
+                            ),
+                          ],
+                          if (isAdminMessage && !isAdmin) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE28766).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                "Admin",
+                                style: TextStyle(
+                                  color: const Color(0xFFE28766),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (isCustomerMessage && isAdmin) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                "User",
+                                style: TextStyle(
+                                  color: Colors.green[700],
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                          // Delete button
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () => _confirmDeleteSingleMessage(messageId),
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: isAdmin 
+                                    ? Colors.white.withOpacity(0.4) 
+                                    : Colors.grey.withOpacity(0.4),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Admin avatar (only for sent messages)
+          if (isAdmin) ...[
+            const SizedBox(width: 10),
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: _accentColor,
+                child: const Icon(
+                  Icons.admin_panel_settings,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // --- BUILD MESSAGE INPUT (IMPROVED) ---
+  Widget _buildMessageInput({required bool isMobile}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 16,
+        vertical: isMobile ? 10 : 14,
+      ),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        border: Border(
+          top: BorderSide(
+            color: _borderColor.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                color: _isDarkMode ? const Color(0xFF222222) : const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: _borderColor.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: TextField(
+                controller: _messageController,
+                style: TextStyle(
+                  color: _primaryTextColor,
+                  fontSize: isMobile ? 14 : 15,
+                ),
+                decoration: InputDecoration(
+                  hintText: "Type a message...",
+                  hintStyle: TextStyle(
+                    color: _secondaryTextColor.withOpacity(0.6),
+                    fontSize: isMobile ? 13 : 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: isMobile ? 10 : 14,
+                    horizontal: 4,
+                  ),
+                ),
+                onSubmitted: (_) => _sendTargetedMessage(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            child: Material(
+              color: _accentColor,
+              shape: const CircleBorder(),
+              elevation: 4,
+              shadowColor: _accentColor.withOpacity(0.3),
+              child: InkWell(
+                onTap: _sendTargetedMessage,
+                customBorder: const CircleBorder(),
+                child: Container(
+                  padding: EdgeInsets.all(isMobile ? 12 : 14),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.send_rounded,
+                    color: Colors.white,
+                    size: isMobile ? 20 : 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- MARK MESSAGES AS READ ---
+  void _markMessagesAsRead(String userId) async {
+    try {
+      final adminId = FirebaseAuth.instance.currentUser?.uid;
+      if (adminId == null) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('chat_messages')
+          .where('participants', arrayContains: userId)
+          .where('read', isEqualTo: false)
+          .where('isAdminMessage', isEqualTo: false)
+          .get();
+
+      for (var doc in snapshot.docs) {
+        await doc.reference.update({'read': true});
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  // --- DELETE SINGLE MESSAGE ---
+  void _confirmDeleteSingleMessage(String messageId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _cardColor,
+        title: Text("Delete Message?", style: TextStyle(color: _primaryTextColor)),
+        content: Text("This action cannot be undone.", style: TextStyle(color: _secondaryTextColor)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('chat_messages').doc(messageId).delete();
+              if (mounted) Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Message deleted'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- DELETE ALL MESSAGES ---
+  void _confirmDeleteAllMessages(String userId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _cardColor,
+        title: Text("Delete All Messages?", style: TextStyle(color: _primaryTextColor)),
+        content: Text(
+          "This will delete all messages with ${_selectedChatUser!['name'] ?? 'this user'}. This action cannot be undone.",
+          style: TextStyle(color: _secondaryTextColor),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              final snapshot = await FirebaseFirestore.instance
+                  .collection('chat_messages')
+                  .where('participants', arrayContains: userId)
+                  .get();
+              
+              final batch = FirebaseFirestore.instance.batch();
+              for (var doc in snapshot.docs) {
+                batch.delete(doc.reference);
+              }
+              await batch.commit();
+              
+              if (mounted) {
+                Navigator.pop(context);
+                setState(() {
+                  _cachedMessages = [];
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('All messages deleted'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: const Text("Delete All", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FORMAT TIMESTAMP ---
+  String _formatTimestamp(Timestamp timestamp) {
+    try {
+      final DateTime dateTime = timestamp.toDate();
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      
+      if (difference.inDays > 0) {
+        if (difference.inDays > 7) {
+          return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+        }
+        return '${difference.inDays}d ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}m ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // --- SEND MESSAGE ---
+  void _sendTargetedMessage() async {
+    final messageText = _messageController.text.trim();
+    if (messageText.isEmpty || _selectedChatUser == null) return;
+    
+    final adminId = FirebaseAuth.instance.currentUser?.uid;
+    if (adminId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in as admin to send messages')),
+      );
+      return;
+    }
+
+    final String userId = _selectedChatUser!['uid'];
+    
+    try {
+      await FirebaseFirestore.instance.collection('chat_messages').add({
+        'senderId': adminId,
+        'receiverId': userId,
+        'message': messageText,
+        'timestamp': FieldValue.serverTimestamp(),
+        'participants': [adminId, userId],
+        'read': false,
+        'isAdminMessage': true,
+        'isCustomerMessage': false,
+      });
+
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'userId': userId,
+        'senderId': adminId,
+        'type': 'message',
+        'title': 'New Message from Admin',
+        'body': 'You have received a new message from the salon admin.',
+        'message': messageText,
+        'timestamp': FieldValue.serverTimestamp(),
+        'read': false,
+        'chatId': 'admin_chat_$userId',
+      });
+
+      _messageController.clear();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Message sent to ${_selectedChatUser!['name'] ?? 'user'}'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send message: $e')),
+      );
+    }
+  }
+
+  // --- 5. ANNOUNCEMENTS HUB ---
   Widget _buildAnnouncementsHub({required bool isMobile}) {
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text("Compose System Announcement", style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 12),
+          
+          TextField(
+            controller: _announcementTitleController,
+            style: TextStyle(color: _primaryTextColor),
+            decoration: InputDecoration(
+              hintText: "Enter announcement title...",
+              hintStyle: TextStyle(color: _secondaryTextColor, fontSize: 13),
+              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
+              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentColor)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 12),
+          
           Row(
             children: [
               Text("Target Demographics: ", style: TextStyle(color: _secondaryTextColor, fontSize: 13)),
@@ -707,57 +1756,103 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          
           TextField(
             controller: _announcementController,
             maxLines: 3,
             style: TextStyle(color: _primaryTextColor),
             decoration: InputDecoration(
-              hintText: "Write systemic message content broadcast dispatch updates...",
+              hintText: "Write announcement message...",
               hintStyle: TextStyle(color: _secondaryTextColor, fontSize: 13),
               enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: _borderColor)),
               focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _accentColor)),
             ),
           ),
           const SizedBox(height: 12),
+          
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _accentColor, padding: const EdgeInsets.all(14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentColor, 
+                padding: const EdgeInsets.all(14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
               onPressed: _postAnnouncement,
-              child: const Text("Broadcast Live to Audience Cluster", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Text(
+                "Broadcast Announcement",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: isMobile ? 14 : 16),
+              ),
             ),
           ),
           const SizedBox(height: 24),
-          Text("Dispatched Global Alerts Stream Log", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _primaryTextColor)),
+          
+          Text("Announcement History", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _primaryTextColor)),
           const SizedBox(height: 12),
+          
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('announcements').orderBy('timestamp', descending: true).snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox();
-                var list = snapshot.data!.docs;
-
-                if (list.isEmpty) {
-                  return Center(child: Text("No history of global alerts tracked.", style: TextStyle(color: _secondaryTextColor)));
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.campaign_outlined, size: 40, color: _secondaryTextColor),
+                        const SizedBox(height: 8),
+                        Text("No announcements yet.", style: TextStyle(color: _secondaryTextColor)),
+                      ],
+                    ),
+                  );
+                }
+
+                var list = snapshot.data!.docs;
 
                 return ListView.builder(
                   itemCount: list.length,
                   itemBuilder: (context, i) {
                     var data = list[i].data() as Map<String, dynamic>;
                     String audience = data['targetAudience'] ?? 'All';
+                    String title = data['title'] ?? 'Announcement';
+                    String message = data['message'] ?? '';
+                    Timestamp? timestamp;
+                    
+                    if (data['timestamp'] != null && data['timestamp'] is Timestamp) {
+                      timestamp = data['timestamp'] as Timestamp;
+                    }
 
                     return Card(
                       color: _cardColor,
                       margin: const EdgeInsets.symmetric(vertical: 4),
-                      shape: RoundedRectangleBorder(side: BorderSide(color: _borderColor), borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: _borderColor), 
+                        borderRadius: BorderRadius.circular(8)
+                      ),
                       child: ListTile(
                         dense: true,
-                        title: Text(data['message'] ?? '', style: TextStyle(color: _primaryTextColor)),
-                        subtitle: Text("Audience Segment Scope: $audience", style: TextStyle(color: _accentColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                        title: Text(
+                          title,
+                          style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(message, style: TextStyle(color: _secondaryTextColor)),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Audience: $audience • ${timestamp != null ? _formatTimestamp(timestamp!) : 'No date'}",
+                              style: TextStyle(color: _accentColor, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
-                          onPressed: () => FirebaseFirestore.instance.collection('announcements').doc(list[i].id).delete(),
+                          onPressed: () => _confirmDeleteAnnouncement(list[i].id),
                         ),
                       ),
                     );
@@ -766,29 +1861,145 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
               },
             ),
           )
-          ],
+        ],
+      ),
+    );
+  }
+
+  // --- CONFIRM DELETE ANNOUNCEMENT ---
+  void _confirmDeleteAnnouncement(String docId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _cardColor,
+        title: Text(
+          "Delete Announcement?",
+          style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "This action cannot be undone.",
+          style: TextStyle(color: _secondaryTextColor),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel", style: TextStyle(color: _secondaryTextColor)),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await FirebaseFirestore.instance.collection('announcements').doc(docId).delete();
+                if (mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Announcement deleted'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to delete: $e')),
+                );
+              }
+            },
+            child: Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- POST ANNOUNCEMENT ---
+  void _postAnnouncement() async {
+    final title = _announcementTitleController.text.trim();
+    final message = _announcementController.text.trim();
+    
+    if (title.isEmpty || message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            title.isEmpty ? 'Please enter an announcement title' : 'Please enter an announcement message',
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
         ),
       );
+      return;
     }
+    
+    try {
+      await FirebaseFirestore.instance.collection('announcements').add({
+        'title': title,
+        'message': message,
+        'targetAudience': _broadcastTarget,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      
+      _announcementTitleController.clear();
+      _announcementController.clear();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Announcement broadcast successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to post announcement: $e')),
+      );
+    }
+  }
 
-  // --- HELPER METRIC RECENT REGISTRATION LOGS ---
+  // --- 6. RECENT ACTIVITY ---
   Widget _buildRealtimeRecentActivityList() {
+    final String? adminId = FirebaseAuth.instance.currentUser?.uid;
+    
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').orderBy('createdAt', descending: true).limit(5).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('role', whereIn: ['Customer', 'Vendor'])
+          .orderBy('createdAt', descending: true)
+          .limit(5)
+          .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        var docs = snapshot.data!.docs;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            alignment: Alignment.center,
+            child: Text(
+              "No new user registrations tracked.",
+              style: TextStyle(color: _secondaryTextColor),
+            ),
+          );
+        }
+
+        var docs = snapshot.data!.docs.where((doc) => doc.id != adminId).toList();
 
         if (docs.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(16),
             alignment: Alignment.center,
-            child: Text("No new profile system registration nodes tracked.", style: TextStyle(color: _secondaryTextColor)),
+            child: Text(
+              "No new user registrations tracked.",
+              style: TextStyle(color: _secondaryTextColor),
+            ),
           );
         }
 
         return Container(
-          decoration: BoxDecoration(color: _cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderColor)),
+          decoration: BoxDecoration(
+            color: _cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderColor),
+          ),
           child: ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -796,11 +2007,36 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
             separatorBuilder: (c, i) => Divider(height: 1, color: _borderColor),
             itemBuilder: (context, index) {
               var data = docs[index].data() as Map<String, dynamic>;
+              String role = data['role'] ?? 'User';
+              
               return ListTile(
                 dense: true,
                 leading: const Icon(Icons.account_circle, color: Colors.grey),
-                title: Text(data['name'] ?? 'New Account Node', style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.w600)),
-                subtitle: Text(data['role'] ?? 'Customer', style: TextStyle(color: _secondaryTextColor)),
+                title: Text(
+                  data['name'] ?? 'New Account',
+                  style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: role == 'Vendor' 
+                            ? Colors.green.withOpacity(0.1) 
+                            : Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        role,
+                        style: TextStyle(
+                          color: role == 'Vendor' ? Colors.green[700] : Colors.blue[700],
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 trailing: const Icon(Icons.check_circle, color: Colors.green, size: 14),
               );
             },
@@ -810,32 +2046,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
-  // --- PERSISTENCE WRITERS INTERACTION METHOD DATA ENGINES ---
-  void _sendTargetedMessage() async {
-    if (_messageController.text.trim().isEmpty || _selectedChatUser == null) return;
-    
-    // Writes directly to your current 'admin_messages' root collection securely mapped with unique contextual indices
-    await FirebaseFirestore.instance.collection('admin_messages').add({
-      'userId': _selectedChatUser!['uid'],
-      'message': _messageController.text.trim(),
-      'timestamp': FieldValue.serverTimestamp(),
-      'direction': 'from_admin',
-    });
-    _messageController.clear();
-  }
-
-  void _postAnnouncement() async {
-    if (_announcementController.text.trim().isEmpty) return;
-    
-    // Writes directly to your current 'announcements' collection appending metadata properties dynamically
-    await FirebaseFirestore.instance.collection('announcements').add({
-      'message': _announcementController.text.trim(),
-      'targetAudience': _broadcastTarget,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-    _announcementController.clear();
-  }
-
+  // --- DELETE USER ---
   void _confirmDeleteUser(String id) {
     showDialog(
       context: context,
@@ -856,6 +2067,7 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
     );
   }
 
+  // --- LOGOUT ---
   void _showLogoutConfirmation() {
     showDialog(
       context: context,
