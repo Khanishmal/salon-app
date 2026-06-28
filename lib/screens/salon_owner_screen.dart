@@ -334,18 +334,25 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
               childAspectRatio: isMobile ? 1.4 : 1.6,
               children: [
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .where('role', whereIn: ['Customer', 'Vendor'])
-                      .snapshots(),
-                  builder: (context, snap) => _analyticsCard(
-                    "Total Users",
-                    snap.hasData ? snap.data!.docs.length.toString() : "0",
-                    Icons.people,
-                    Colors.blue,
-                    () => setState(() => _activeTab = 1),
-                  ),
-                ),
+  stream: FirebaseFirestore.instance
+      .collection('users')
+      .where('role', whereIn: ['Customer', 'Vendor'])
+      .snapshots(),
+  builder: (context, snap) {
+    int count = 0;
+    if (snap.hasData) {
+      final adminId = FirebaseAuth.instance.currentUser?.uid;
+      count = snap.data!.docs.where((doc) => doc.id != adminId).length;
+    }
+    return _analyticsCard(
+      "Total Users",
+      count.toString(),
+      Icons.people,
+      Colors.blue,
+      () => setState(() => _activeTab = 1),
+    );
+  },
+),
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Vendor').snapshots(),
                   builder: (context, snap) => _analyticsCard("Salons Active", snap.hasData ? snap.data!.docs.length.toString() : "0", Icons.storefront_rounded, Colors.green, () => setState(() => _activeTab = 2)),
@@ -406,153 +413,165 @@ class _SalonOwnerScreenState extends State<SalonOwnerScreen> {
   }
 
   // --- 2. COMPLETE USER PROFILE DIRECTORY MANAGEMENT ---
-  Widget _buildUserManagement(String filter, {required bool isMobile}) {
-    final String? adminId = FirebaseAuth.instance.currentUser?.uid;
-    
-    Query query = FirebaseFirestore.instance.collection('users');
-    
-    if (filter == 'All') {
-      query = query.where('role', whereIn: ['Customer', 'Vendor']);
-    } else if (filter == 'Vendor') {
-      query = query.where('role', isEqualTo: 'Vendor');
-    } else if (filter == 'Customer') {
-      query = query.where('role', isEqualTo: 'Customer');
-    }
+  // Replace the _buildUserManagement method with this fixed version:
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+Widget _buildUserManagement(String filter, {required bool isMobile}) {
+  final String? adminId = FirebaseAuth.instance.currentUser?.uid;
+  
+  Query query = FirebaseFirestore.instance.collection('users');
+  
+  if (filter == 'All') {
+    query = query.where('role', whereIn: ['Customer', 'Vendor']);
+  } else if (filter == 'Vendor') {
+    query = query.where('role', isEqualTo: 'Vendor');
+  } else if (filter == 'Customer') {
+    query = query.where('role', isEqualTo: 'Customer');
+  }
 
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
-                const SizedBox(height: 12),
-                Text(
-                  "Error loading users",
-                  style: TextStyle(color: _secondaryTextColor),
-                ),
-              ],
-            ),
-          );
-        }
+  return StreamBuilder<QuerySnapshot>(
+    stream: query.snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
 
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        var docs = snapshot.data!.docs.where((doc) => doc.id != adminId).toList();
-
-        if (_searchQuery.isNotEmpty) {
-          docs = docs.where((d) {
-            var data = d.data() as Map<String, dynamic>;
-            return (data['name'] ?? '').toString().toLowerCase().contains(_searchQuery) ||
-                   (data['email'] ?? '').toString().toLowerCase().contains(_searchQuery);
-          }).toList();
-        }
-
-        if (docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.people_outline, size: 40, color: _secondaryTextColor),
-                const SizedBox(height: 8),
-                Text(
-                  "No users found",
-                  style: TextStyle(color: _secondaryTextColor, fontSize: 13),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            var doc = docs[index];
-            var data = doc.data() as Map<String, dynamic>;
-            bool isActive = data['isActive'] ?? true;
-            String role = data['role'] ?? 'User';
-
-            return Card(
-              color: _cardColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: _borderColor),
+      if (snapshot.hasError) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
+              const SizedBox(height: 12),
+              Text(
+                "Error loading users",
+                style: TextStyle(color: _secondaryTextColor),
               ),
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: _accentColor.withOpacity(0.15),
-                  child: Text(
-                    (data['name'] ?? 'U').isNotEmpty ? (data['name'] ?? 'U')[0].toUpperCase() : 'U',
-                    style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold),
-                  ),
+            ],
+          ),
+        );
+      }
+
+      if (!snapshot.hasData) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      var docs = snapshot.data!.docs.where((doc) => doc.id != adminId).toList();
+
+      if (_searchQuery.isNotEmpty) {
+        docs = docs.where((d) {
+          var data = d.data() as Map<String, dynamic>;
+          return (data['name'] ?? '').toString().toLowerCase().contains(_searchQuery) ||
+                 (data['email'] ?? '').toString().toLowerCase().contains(_searchQuery);
+        }).toList();
+      }
+
+      if (docs.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.people_outline, size: 40, color: _secondaryTextColor),
+              const SizedBox(height: 8),
+              Text(
+                "No users found",
+                style: TextStyle(color: _secondaryTextColor, fontSize: 13),
+              ),
+            ],
+          ),
+        );
+      }
+
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: docs.length,
+        itemBuilder: (context, index) {
+          var doc = docs[index];
+          var data = doc.data() as Map<String, dynamic>;
+          bool isActive = data['isActive'] ?? true;
+          String role = data['role'] ?? 'User';
+
+          return Card(
+            color: _cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: _borderColor),
+            ),
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: _accentColor.withOpacity(0.15),
+                child: Text(
+                  (data['name'] ?? 'U').isNotEmpty ? (data['name'] ?? 'U')[0].toUpperCase() : 'U',
+                  style: TextStyle(color: _accentColor, fontWeight: FontWeight.bold),
                 ),
-                title: Text(
-                  data['name'] ?? 'No Registered Name',
-                  style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold),
-                ),
-                subtitle: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: role == 'Vendor' 
-                            ? Colors.green.withOpacity(0.1) 
-                            : Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        role,
-                        style: TextStyle(
-                          color: role == 'Vendor' ? Colors.green[700] : Colors.blue[700],
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
+              ),
+              title: Text(
+                data['name'] ?? 'No Registered Name',
+                style: TextStyle(color: _primaryTextColor, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Row(
+                children: [
+                  // Role Badge with fixed width
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: role == 'Vendor' 
+                          ? Colors.green.withOpacity(0.15) 
+                          : Colors.blue.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      role,
+                      style: TextStyle(
+                        color: role == 'Vendor' ? Colors.green[700] : Colors.blue[700],
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
+                  ),
+                  const SizedBox(width: 8),
+                  // Email with overflow handling
+                  Expanded(
+                    child: Text(
                       data['email'] ?? '',
                       style: TextStyle(color: _secondaryTextColor, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        isActive ? Icons.block : Icons.check_circle,
-                        color: isActive ? Colors.red : Colors.green,
-                        size: 20,
-                      ),
-                      onPressed: () => FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(doc.id)
-                          .update({'isActive': !isActive}),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
-                      onPressed: () => _confirmDeleteUser(doc.id),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            );
-          },
-        );
-      },
-    );
-  }
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      isActive ? Icons.block : Icons.check_circle,
+                      color: isActive ? Colors.red : Colors.green,
+                      size: 20,
+                    ),
+                    onPressed: () => FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(doc.id)
+                        .update({'isActive': !isActive}),
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                    onPressed: () => _confirmDeleteUser(doc.id),
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
   // --- 3. INTAKE PROCESSING & APPROVAL MANAGEMENT PANEL ---
   Widget _buildPendingApprovals({required bool isMobile}) {

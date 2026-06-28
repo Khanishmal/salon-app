@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -14,14 +15,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  final _businessNameController = TextEditingController(); // For vendor
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
   
   bool _isLoading = false;
   String _selectedRole = 'Customer';
   bool _obscurePassword = true;
+  bool _showVendorFields = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRole = 'Customer';
+  }
 
   Future<void> _registerUser() async {
+    // Basic validation
     if (_nameController.text.isEmpty || _emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      _showError("Please fill all fields");
+      _showError("Please fill all required fields");
       return;
     }
 
@@ -32,10 +44,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    // Password validation (minimum 6 characters)
+    // Password validation
     if (_passwordController.text.length < 6) {
       _showError("Password must be at least 6 characters");
       return;
+    }
+
+    // Vendor specific validation
+    if (_selectedRole == 'Vendor') {
+      if (_businessNameController.text.isEmpty) {
+        _showError("Please enter your business name");
+        return;
+      }
+      if (_phoneController.text.isEmpty) {
+        _showError("Please enter your phone number");
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -49,23 +73,53 @@ class _SignUpScreenState extends State<SignUpScreen> {
       String uid = userCredential.user!.uid;
       await userCredential.user?.updateDisplayName(_nameController.text.trim());
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      // Prepare user data
+      Map<String, dynamic> userData = {
         'uid': uid,
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
         'role': _selectedRole,
-        'approved': _selectedRole == 'Customer',
-        'loyaltyPoints': 0,
-        'memberStatus': 'Bronze',
-        'createdAt': FieldValue.serverTimestamp(),
         'isActive': true,
+        'createdAt': FieldValue.serverTimestamp(),
         'lastLogin': null,
-      });
+      };
 
+      // Add vendor specific fields
+      if (_selectedRole == 'Vendor') {
+        userData.addAll({
+          'businessName': _businessNameController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'address': _addressController.text.trim(),
+          'approved': false, // Needs admin approval
+          'vendorStatus': 'pending', // pending, approved, rejected
+          'totalProducts': 0,
+          'totalSales': 0,
+          'rating': 0.0,
+          'totalReviews': 0,
+          'commission': 0.0,
+          'walletBalance': 0.0,
+          'subscriptionPlan': 'free',
+        });
+      } else {
+        userData.addAll({
+          'loyaltyPoints': 0,
+          'memberStatus': 'Bronze',
+          'approved': true,
+        });
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
+
+      // Send email verification
       await userCredential.user?.sendEmailVerification();
 
       if (!mounted) return;
-      _showVerificationDialog(context);
+
+      if (_selectedRole == 'Vendor') {
+        _showVendorApplicationDialog(context);
+      } else {
+        _showVerificationDialog(context);
+      }
       
     } on FirebaseAuthException catch (e) {
       String errorMessage;
@@ -96,6 +150,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         content: Text(message),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -108,6 +163,59 @@ class _SignUpScreenState extends State<SignUpScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Verify Your Email"),
         content: const Text("A verification link has been sent to your email. Please verify it before signing in."),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text("Back to Sign In", style: TextStyle(color: Color(0xFFF2845C))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVendorApplicationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Vendor Application Submitted!"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Your vendor application has been submitted successfully."),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDEEE9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "📋 Application Details:",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text("Business: ${_businessNameController.text}"),
+                  Text("Email: ${_emailController.text}"),
+                  Text("Phone: ${_phoneController.text}"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              "Please wait for admin approval. You'll receive a notification once your account is approved.",
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -144,13 +252,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 const Text("Join GlowSalon beauty network", style: TextStyle(color: Colors.grey)),
                 const SizedBox(height: 30),
                 
+                // Name Field
                 _buildField(_nameController, "Full Name", Icons.person_outline),
                 const SizedBox(height: 15),
+                
+                // Email Field
                 _buildField(_emailController, "Email", Icons.email_outlined),
                 const SizedBox(height: 15),
+                
+                // Password Field
                 _buildPasswordField(),
                 const SizedBox(height: 20),
 
+                // Role Selection
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text("Register as:", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -163,7 +277,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         value: 'Customer',
                         groupValue: _selectedRole,
                         activeColor: const Color(0xFFF2845C),
-                        onChanged: (val) => setState(() => _selectedRole = val!),
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedRole = val!;
+                            _showVendorFields = false;
+                          });
+                        },
                       ),
                     ),
                     Expanded(
@@ -172,11 +292,39 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         value: 'Vendor',
                         groupValue: _selectedRole,
                         activeColor: const Color(0xFFF2845C),
-                        onChanged: (val) => setState(() => _selectedRole = val!),
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedRole = val!;
+                            _showVendorFields = true;
+                          });
+                        },
                       ),
                     ),
                   ],
                 ),
+                
+                // Vendor Specific Fields
+                if (_showVendorFields) ...[
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFDEEE9),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFF2845C).withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildField(_businessNameController, "Business Name", Icons.store_outlined),
+                        const SizedBox(height: 15),
+                        _buildField(_phoneController, "Phone Number", Icons.phone_outlined),
+                        const SizedBox(height: 15),
+                        _buildField(_addressController, "Business Address (Optional)", Icons.location_on_outlined),
+                      ],
+                    ),
+                  ),
+                ],
                 
                 const SizedBox(height: 25),
                 _isLoading 

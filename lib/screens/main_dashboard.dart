@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'signin_screen.dart'; 
 import 'vendor/vendor_screen.dart'; 
 import 'customer/ar_makeup_screen.dart'; // Ensure this matches your project directory path
-
+import 'signup_screen.dart'; // Ensure this matches your project directory path
 class GlowSalonDashboard extends StatelessWidget {
   const GlowSalonDashboard({super.key});
 
@@ -379,29 +379,37 @@ class GlowSalonDashboard extends StatelessWidget {
     );
   }
 
-  Widget _footerColumn(BuildContext context, String title, List<String> items) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-        const SizedBox(height: 16),
-        ...items.map((item) => GestureDetector(
-          onTap: () {
-            if (item == "Become a Vendor") {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const VendorScreen()));
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12.0),
-            child: Text(
-              item, 
-              style: const TextStyle(color: Color(0xFFAEAEB2), fontSize: 14, fontWeight: FontWeight.w400),
-            ),
+  // In main_dashboard.dart, update the footer section:
+
+Widget _footerColumn(BuildContext context, String title, List<String> items) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+      const SizedBox(height: 16),
+      ...items.map((item) => GestureDetector(
+        onTap: () {
+          if (item == "Become a Vendor") {
+            // Navigate to SignUp with vendor role pre-selected
+            Navigator.push(
+              context, 
+              MaterialPageRoute(
+                builder: (context) => SignUpScreen(),
+              ),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: Text(
+            item, 
+            style: const TextStyle(color: Color(0xFFAEAEB2), fontSize: 14, fontWeight: FontWeight.w400),
           ),
-        )),
-      ],
-    );
-  }
+        ),
+      )),
+    ],
+  );
+}
 
   Widget _buildChatButton(BuildContext context) {
     return FloatingActionButton(
