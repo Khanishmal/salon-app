@@ -480,12 +480,12 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 );
                 break;
               case 'Promotions':
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (context) => const VendorPromotionsScreen(),
-                //   ),
-                // );
+                 Navigator.push(
+                   context,
+                   MaterialPageRoute(
+                     builder: (context) => const VendorPromotionsScreen(),
+                   ),
+                 );
                 break;
               case 'Working Hours':
                 Navigator.push(

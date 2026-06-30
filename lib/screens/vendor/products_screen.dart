@@ -21,6 +21,17 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+  final List<String> _categories = [
+    'All',
+    'Lipsticks',
+    'Foundations',
+    'Eyeliners',
+    'Jewellery',
+    'Hair Accessories',
+    'Mehndi Templates',
+    'Other',
+  ];
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -66,19 +77,35 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
               },
             ),
           ),
-          // Category Filter
-          SizedBox(
-            height: 40,
+          // Category Filter - Horizontal Scroll
+          Container(
+            height: 45,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: _categories.length + 1,
+              itemCount: _categories.length,
               itemBuilder: (context, index) {
-                if (index == 0) {
-                  return _buildCategoryChip('All', 'All');
-                }
-                final category = _categories[index - 1];
-                return _buildCategoryChip(category, category);
+                final category = _categories[index];
+                final isSelected = _selectedCategory == category;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(category),
+                    selected: isSelected,
+                    onSelected: (_) {
+                      setState(() {
+                        _selectedCategory = category;
+                      });
+                    },
+                    backgroundColor: Colors.grey.shade100,
+                    selectedColor: const Color(0xFFFDEEE9),
+                    checkmarkColor: const Color(0xFFF2845C),
+                    labelStyle: TextStyle(
+                      color: isSelected ? const Color(0xFFF2845C) : Colors.grey.shade700,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                );
               },
             ),
           ),
@@ -92,7 +119,11 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
+                    ),
+                  );
                 }
 
                 if (snapshot.hasError) {
@@ -100,12 +131,37 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
-                        const SizedBox(height: 10),
-                        const Text('Error loading products'),
-                        ElevatedButton(
+                        Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading products',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            'Please create the required Firestore index for products.\n\nIndex: vendorId (Ascending) + createdAt (Descending)',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
                           onPressed: () => setState(() {}),
-                          child: const Text('Retry'),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF2845C),
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ],
                     ),
@@ -141,11 +197,12 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
 
                 var products = snapshot.data!.docs;
 
-                // Filter by category
+                // Filter by category (case-insensitive)
                 if (_selectedCategory != 'All') {
                   products = products.where((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    return data['category'] == _selectedCategory;
+                    String productCategory = data['category'] ?? '';
+                    return productCategory.toLowerCase() == _selectedCategory.toLowerCase();
                   }).toList();
                 }
 
@@ -153,17 +210,39 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
                 if (_searchQuery.isNotEmpty) {
                   products = products.where((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    return (data['name'] ?? '').toString().toLowerCase().contains(_searchQuery);
+                    String name = (data['name'] ?? '').toString().toLowerCase();
+                    String category = (data['category'] ?? '').toString().toLowerCase();
+                    String brand = (data['brand'] ?? '').toString().toLowerCase();
+                    return name.contains(_searchQuery) || 
+                           category.contains(_searchQuery) || 
+                           brand.contains(_searchQuery);
                   }).toList();
                 }
 
                 if (products.isEmpty) {
                   return Center(
-                    child: Text(
-                      'No products found',
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[500],
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 40, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No products found',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                        if (_selectedCategory != 'All') ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'No products in "$_selectedCategory" category',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   );
                 }
@@ -196,43 +275,13 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
     );
   }
 
-  final List<String> _categories = [
-    'Lipsticks',
-    'Foundations',
-    'Eyeliners',
-    'Jewellery',
-    'Hair Accessories',
-    'Mehndi Templates',
-    'Other',
-  ];
-
-  Widget _buildCategoryChip(String label, String value) {
-    bool isSelected = _selectedCategory == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) {
-          setState(() => _selectedCategory = value);
-        },
-        backgroundColor: Colors.grey.shade100,
-        selectedColor: const Color(0xFFFDEEE9),
-        checkmarkColor: const Color(0xFFF2845C),
-        labelStyle: TextStyle(
-          color: isSelected ? const Color(0xFFF2845C) : Colors.grey.shade700,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-        ),
-      ),
-    );
-  }
-
   Widget _buildProductCard(String productId, Map<String, dynamic> data) {
     String name = data['name'] ?? 'Product';
     double price = (data['price'] ?? 0).toDouble();
     int stock = data['stock'] ?? 0;
     String imageUrl = data['imageUrl'] ?? '';
     bool isActive = data['isActive'] ?? true;
+    String category = data['category'] ?? '';
 
     return InkWell(
       onTap: () {
@@ -306,6 +355,26 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (category.isNotEmpty)
+                  Positioned(
+                    bottom: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        category,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),

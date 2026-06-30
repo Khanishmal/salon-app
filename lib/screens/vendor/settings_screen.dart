@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../signin_screen.dart';
+import 'profile_screen.dart';
+import 'working_hours_screen.dart';
+import 'unavailable_dates_screen.dart';
+import 'promotions_screen.dart';
 
 class VendorSettingsScreen extends StatefulWidget {
   const VendorSettingsScreen({super.key});
@@ -12,6 +16,7 @@ class VendorSettingsScreen extends StatefulWidget {
 }
 
 class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
+  final User? user = FirebaseAuth.instance.currentUser;
   bool _isLoggingOut = false;
 
   @override
@@ -48,8 +53,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Edit Profile',
               subtitle: 'Update your business information',
               onTap: () {
-                Navigator.pop(context);
-                // Navigate to profile
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VendorProfileScreen(),
+                  ),
+                );
               },
             ),
             _buildSettingsTile(
@@ -57,7 +66,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Notifications',
               subtitle: 'Manage notification preferences',
               onTap: () {
-                // Show notification settings
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Notification settings coming soon'),
+                    backgroundColor: Color(0xFFF2845C),
+                  ),
+                );
               },
             ),
             _buildSettingsTile(
@@ -65,7 +79,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Privacy & Security',
               subtitle: 'Manage your security settings',
               onTap: () {
-                // Show privacy settings
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Privacy settings coming soon'),
+                    backgroundColor: Color(0xFFF2845C),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 24),
@@ -85,8 +104,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Working Hours',
               subtitle: 'Set your business hours',
               onTap: () {
-                Navigator.pop(context);
-                // Navigate to working hours
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WorkingHoursScreen(vendorId: user?.uid ?? ''),
+                  ),
+                );
               },
             ),
             _buildSettingsTile(
@@ -94,8 +117,25 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Unavailable Dates',
               subtitle: 'Mark holidays and days off',
               onTap: () {
-                Navigator.pop(context);
-                // Navigate to unavailable dates
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => UnavailableDatesScreen(vendorId: user?.uid ?? ''),
+                  ),
+                );
+              },
+            ),
+            _buildSettingsTile(
+              icon: Icons.local_offer,
+              title: 'Promotions',
+              subtitle: 'Manage your discounts and offers',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VendorPromotionsScreen(),
+                  ),
+                );
               },
             ),
             _buildSettingsTile(
@@ -103,7 +143,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Payout Settings',
               subtitle: 'Manage your payment preferences',
               onTap: () {
-                // Show payout settings
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Payout settings coming soon'),
+                    backgroundColor: Color(0xFFF2845C),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 24),
@@ -123,7 +168,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Help & Support',
               subtitle: 'Get help with your account',
               onTap: () {
-                // Show help
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Help & Support coming soon'),
+                    backgroundColor: Color(0xFFF2845C),
+                  ),
+                );
               },
             ),
             _buildSettingsTile(
@@ -131,7 +181,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Terms & Conditions',
               subtitle: 'View our terms and conditions',
               onTap: () {
-                // Show terms
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Terms & Conditions coming soon'),
+                    backgroundColor: Color(0xFFF2845C),
+                  ),
+                );
               },
             ),
             _buildSettingsTile(
@@ -139,7 +194,12 @@ class _VendorSettingsScreenState extends State<VendorSettingsScreen> {
               title: 'Privacy Policy',
               subtitle: 'Learn about our privacy practices',
               onTap: () {
-                // Show privacy policy
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Privacy Policy coming soon'),
+                    backgroundColor: Color(0xFFF2845C),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 32),

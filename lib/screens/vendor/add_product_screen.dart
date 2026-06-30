@@ -5,12 +5,12 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AddProductScreen extends StatefulWidget {
   final String vendorId;
-  final String? productId; // For editing
-  final Map<String, dynamic>? productData; // For editing
+  final String? productId;
+  final Map<String, dynamic>? productData;
 
   const AddProductScreen({
     super.key,
@@ -36,9 +36,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
   bool _isUploading = false;
   String? _imageUrl;
   bool _isEditing = false;
+  bool _isImagePicking = false;
   
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ImagePicker _picker = ImagePicker();
+
+  final List<String> _categories = [
+    'Lipsticks',
+    'Foundations',
+    'Eyeliners',
+    'Jewellery',
+    'Hair Accessories',
+    'Mehndi Templates',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -53,6 +65,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _brandController.text = widget.productData!['brand'] ?? '';
       _imageUrl = widget.productData!['imageUrl'];
     }
+    
+    // Pre-check permissions
+    _checkPermissions();
   }
 
   @override
@@ -66,12 +81,102 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.dispose();
   }
 
+  Future<void> _checkPermissions() async {
+    // Just check if permissions are already granted
+    bool hasPermission = await _hasGalleryPermission();
+    if (!hasPermission) {
+      // Request permission when user taps, not here
+    }
+  }
+
+  Future<bool> _hasGalleryPermission() async {
+    if (Platform.isAndroid) {
+      // For Android 13+ (API 33+), use photos permission
+      if (await Permission.photos.isGranted) {
+        return true;
+      }
+      // For older Android, use storage permission
+      if (await Permission.storage.isGranted) {
+        return true;
+      }
+      return false;
+    } else {
+      // iOS
+      if (await Permission.photos.isGranted) {
+        return true;
+      }
+      return false;
+    }
+  }
+
+  Future<void> _requestPermission() async {
+    if (Platform.isAndroid) {
+      // For Android 13+ (API 33+)
+      if (await Permission.photos.request().isGranted) {
+        return;
+      }
+      // For older Android
+      if (await Permission.storage.request().isGranted) {
+        return;
+      }
+      // If both denied, show dialog
+      if (await Permission.photos.isPermanentlyDenied || 
+          await Permission.storage.isPermanentlyDenied) {
+        _showPermissionDeniedDialog();
+      }
+    } else {
+      // iOS
+      if (await Permission.photos.request().isGranted) {
+        return;
+      }
+      if (await Permission.photos.isPermanentlyDenied) {
+        _showPermissionDeniedDialog();
+      }
+    }
+  }
+
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission Required'),
+        content: const Text('Please allow gallery access to upload product images.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickImage() async {
-    // Request permission
-    PermissionStatus status = await Permission.storage.request();
-    if (status.isGranted) {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
+    setState(() => _isImagePicking = true);
+
+    try {
+      // Check if permission is granted
+      bool hasPermission = await _hasGalleryPermission();
+      
+      if (!hasPermission) {
+        await _requestPermission();
+        // Recheck after request
+        hasPermission = await _hasGalleryPermission();
+        if (!hasPermission) {
+          setState(() => _isImagePicking = false);
+          return;
+        }
+      }
+
+      // Pick image from gallery
+      final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 800,
         maxHeight: 800,
@@ -81,30 +186,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
       if (image != null) {
         setState(() {
           _imageFile = File(image.path);
-          _imageUrl = null; // Reset URL when new image is selected
+          _imageUrl = null;
         });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image selected successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
       }
-    } else if (status.isDenied) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Permission Required'),
-          content: const Text('Please allow storage permission to upload product images.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                openAppSettings();
-              },
-              child: const Text('Open Settings'),
-            ),
-          ],
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking image: ${e.toString()}'),
+          backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      setState(() => _isImagePicking = false);
     }
   }
 
@@ -116,12 +217,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
     });
 
     try {
+      // Create a unique filename
       String fileName = 'products/${widget.vendorId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
       Reference ref = _storage.ref().child(fileName);
       
-      UploadTask uploadTask = ref.putFile(_imageFile!);
-      TaskSnapshot snapshot = await uploadTask;
+      // Upload the file
+      UploadTask uploadTask = ref.putFile(
+        _imageFile!,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'vendorId': widget.vendorId,
+            'uploadedAt': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
       
+      // Wait for upload to complete
+      TaskSnapshot snapshot = await uploadTask.whenComplete(() => {});
+      
+      // Get download URL
       String downloadUrl = await snapshot.ref.getDownloadURL();
       
       setState(() {
@@ -131,11 +246,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
       
       return downloadUrl;
     } catch (e) {
+      print('Upload error: $e');
       setState(() {
         _isUploading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error uploading image: $e')),
+        SnackBar(
+          content: Text('Error uploading image: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
       );
       return null;
     }
@@ -143,35 +262,37 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _saveProduct() async {
     if (_formKey.currentState!.validate()) {
-      // Upload image first if selected
-      String? imageUrl = _imageUrl;
-      if (_imageFile != null) {
-        imageUrl = await _uploadImage();
-        if (imageUrl == null) return;
-      }
-
       setState(() {
         _isUploading = true;
       });
 
       try {
+        String? imageUrl = _imageUrl;
+        
+        // Upload image if a new image is selected
+        if (_imageFile != null) {
+          imageUrl = await _uploadImage();
+          if (imageUrl == null) {
+            setState(() => _isUploading = false);
+            return;
+          }
+        }
+
         final Map<String, dynamic> productData = {
           'vendorId': widget.vendorId,
           'name': _nameController.text.trim(),
           'price': double.parse(_priceController.text.trim()),
           'description': _descriptionController.text.trim(),
           'category': _categoryController.text.trim(),
-          'stock': int.parse(_stockController.text.trim() == '' ? '0' : _stockController.text.trim()),
+          'stock': int.parse(_stockController.text.trim().isEmpty ? '0' : _stockController.text.trim()),
           'brand': _brandController.text.trim(),
           'imageUrl': imageUrl ?? '',
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
         if (_isEditing && widget.productId != null) {
-          // Update existing product
           await _firestore.collection('products').doc(widget.productId).update(productData);
         } else {
-          // Add new product
           productData['createdAt'] = FieldValue.serverTimestamp();
           productData['isActive'] = true;
           productData['salesCount'] = 0;
@@ -185,11 +306,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
           Navigator.pop(context, true);
         }
       } catch (e) {
+        print('Save error: $e');
         setState(() {
           _isUploading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving product: $e')),
+          SnackBar(
+            content: Text('Error saving product: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -217,14 +342,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
             children: [
               // Product Image Upload
               GestureDetector(
-                onTap: _pickImage,
+                onTap: _isImagePicking || _isUploading ? null : _pickImage,
                 child: Container(
                   height: 150,
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(
+                      color: _imageFile != null || (_imageUrl != null && _imageUrl!.isNotEmpty)
+                          ? const Color(0xFFF2845C)
+                          : Colors.grey.shade300,
+                      width: 2,
+                    ),
                     image: _imageFile != null
                         ? DecorationImage(
                             image: FileImage(_imageFile!),
@@ -241,19 +371,66 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.cloud_upload_outlined,
-                              size: 50,
-                              color: const Color(0xFFF2845C).withOpacity(0.5),
-                            ),
+                            _isImagePicking
+                                ? const SizedBox(
+                                    height: 30,
+                                    width: 30,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.cloud_upload_outlined,
+                                    size: 50,
+                                    color: const Color(0xFFF2845C).withOpacity(0.5),
+                                  ),
                             const SizedBox(height: 8),
                             Text(
-                              'Tap to upload product image',
-                              style: TextStyle(color: Colors.grey.shade600),
+                              _isImagePicking ? 'Loading gallery...' : 'Tap to upload product image',
+                              style: TextStyle(
+                                color: _isImagePicking ? const Color(0xFFF2845C) : Colors.grey.shade600,
+                              ),
                             ),
                           ],
                         )
-                      : null,
+                      : Stack(
+                          children: [
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.white, size: 16),
+                                      onPressed: _pickImage,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                                      onPressed: () {
+                                        setState(() {
+                                          _imageFile = null;
+                                          _imageUrl = null;
+                                        });
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               if (_isUploading) ...[
@@ -269,53 +446,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ],
               const SizedBox(height: 20),
 
-              // AI Price Guide (only for new products)
-              if (!_isEditing)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDEEE9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_awesome, color: Color(0xFFF2845C)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'AI Price Guide',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            Text(
-                              'Get AI recommendations for pricing',
-                              style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _showAIPriceGuide,
-                        child: const Text(
-                          'Check',
-                          style: TextStyle(color: Color(0xFFF2845C)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 20),
-
               // Product Name
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'Product Name',
+                  labelText: 'Product Name *',
                   hintText: 'e.g., Matte Lipstick',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -335,7 +470,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               TextFormField(
                 controller: _priceController,
                 decoration: InputDecoration(
-                  labelText: 'Price (Rs)',
+                  labelText: 'Price (Rs) *',
                   hintText: 'e.g., 1200',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -355,20 +490,31 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 15),
 
-              // Category
-              TextFormField(
-                controller: _categoryController,
+              // Category Dropdown
+              DropdownButtonFormField<String>(
+                value: _categoryController.text.isNotEmpty ? _categoryController.text : null,
                 decoration: InputDecoration(
-                  labelText: 'Category',
-                  hintText: 'e.g., Lipstick, Foundation',
+                  labelText: 'Category *',
+                  hintText: 'Select category',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: const Icon(Icons.category),
                 ),
+                items: _categories.map((category) {
+                  return DropdownMenuItem<String>(
+                    value: category,
+                    child: Text(category),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _categoryController.text = value ?? '';
+                  });
+                },
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter category';
+                    return 'Please select a category';
                   }
                   return null;
                 },
@@ -449,46 +595,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showAIPriceGuide() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('AI Price Guide 🤖'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Based on market analysis:'),
-            const SizedBox(height: 10),
-            _buildAIPriceRow('Suggested Price', 'Rs. 1,200 - 1,500'),
-            _buildAIPriceRow('Competitor Avg', 'Rs. 1,350'),
-            _buildAIPriceRow('Demand Level', '🔥 High'),
-            _buildAIPriceRow('Profit Margin', '35-40%'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAIPriceRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          Text(value, style: const TextStyle(color: Color(0xFFF2845C))),
-        ],
       ),
     );
   }
