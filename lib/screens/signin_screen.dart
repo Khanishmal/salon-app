@@ -1,4 +1,4 @@
-// lib/screens/signin_screen.dart
+// lib/screens/signin_screen.dart - Full corrected file
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +7,7 @@ import 'vendor/vendor_screen.dart';
 import 'signup_screen.dart';
 import 'salon_owner_screen.dart';
 import 'vendor/vendor_dashboard.dart';
+
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -18,12 +19,11 @@ class _SignInScreenState extends State<SignInScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  bool _obscurePassword = true; // For show/hide password
+  bool _obscurePassword = true;
 
   Future<void> _handleSignIn() async {
     setState(() => _isLoading = true);
     
-    // Email validation regex
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     
     if (!emailRegex.hasMatch(_emailController.text.trim())) {
@@ -55,25 +55,46 @@ class _SignInScreenState extends State<SignInScreen> {
           .get();
 
       if (userDoc.exists) {
-        String role = userDoc.get('role');
+        var userData = userDoc.data() as Map<String, dynamic>;
+        String role = userData['role'] ?? 'Customer';
+        bool isActive = userData['isActive'] ?? true;
+        bool isApproved = userData['approved'] ?? false;
         
         if (!mounted) return;
 
-        // Route based on role
+        if (!isActive) {
+          _showError("Your account has been deactivated. Please contact support.");
+          await FirebaseAuth.instance.signOut();
+          setState(() => _isLoading = false);
+          return;
+        }
+
         if (role == 'Salon Owner') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SalonOwnerScreen()));
         } else if (role == 'Vendor') {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VendorDashboardScreen()));
+          bool hasProducts = await _checkVendorHasProducts(user!.uid);
+          bool hasOrders = await _checkVendorHasOrders(user!.uid);
+          
+          bool isExistingVendor = hasProducts || hasOrders || isApproved;
+          
+          if (isExistingVendor || isApproved) {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const VendorDashboardScreen()));
+          } else {
+            _showError("Your vendor account is pending approval. Please wait for admin confirmation.");
+            await FirebaseAuth.instance.signOut();
+            setState(() => _isLoading = false);
+            return;
+          }
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const CustomerDashboard()));
         }
       } else {
         _showError("Account record not found in database.");
+        await FirebaseAuth.instance.signOut();
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage;
       
-      // Handle specific Firebase Auth errors
       switch (e.code) {
         case 'user-not-found':
           errorMessage = "No account found with this email. Please sign up.";
@@ -100,6 +121,32 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
+  Future<bool> _checkVendorHasProducts(String uid) async {
+    try {
+      QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .where('vendorId', isEqualTo: uid)
+          .limit(1)
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> _checkVendorHasOrders(String uid) async {
+    try {
+      QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('vendorId', isEqualTo: uid)
+          .limit(1)
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -111,9 +158,68 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _handleForgotPassword() async {
+    final email = _emailController.text.trim();
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+    if (!emailRegex.hasMatch(email)) {
+      _showError("Enter your email address above, then tap Forgot password.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      _showSuccess("Password reset link sent. Check your inbox.");
+    } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = "No account found with this email.";
+          break;
+        case 'invalid-email':
+          errorMessage = "Please enter a valid email address.";
+          break;
+        case 'too-many-requests':
+          errorMessage = "Too many requests. Try again later.";
+          break;
+        default:
+          errorMessage = e.message ?? "Could not send reset email. Try again.";
+      }
+      _showError(errorMessage);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.grey),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Back',
+          style: TextStyle(color: Colors.grey, fontSize: 16),
+        ),
+      ),
       backgroundColor: const Color(0xFFF9F9F9),
       body: Center(
         child: SingleChildScrollView(
@@ -140,7 +246,27 @@ class _SignInScreenState extends State<SignInScreen> {
                 
                 _buildInputLabel("Password"),
                 _buildPasswordField(),
-                const SizedBox(height: 30),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _isLoading ? null : _handleForgotPassword,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      "Forgot password?",
+                      style: TextStyle(
+                        color: Color(0xFFF2845C),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
 
                 SizedBox(
                   width: double.infinity,

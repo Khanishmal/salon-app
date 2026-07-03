@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'vendor_chat_screen.dart';
 import 'cart_screen.dart';
+
 class ProductDetailScreen extends StatefulWidget {
   final String productId;
   final String vendorId;
@@ -147,6 +149,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     String brand = _productData!['brand'] ?? '';
     int stock = _productData!['stock'] ?? 0;
     String vendorName = _vendorData?['businessName'] ?? _vendorData?['name'] ?? 'Vendor';
+    String vendorId = widget.vendorId;
     double vendorRating = (_vendorData?['rating'] ?? 0).toDouble();
 
     return Scaffold(
@@ -268,7 +271,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Vendor Info
+                  // Vendor Info with Chat Button
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -307,6 +310,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 ],
                               ),
                             ],
+                          ),
+                        ),
+                        // Chat with Vendor Button
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => VendorChatScreen(
+                                  vendorId: vendorId,
+                                  vendorName: vendorName,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.chat, size: 18),
+                          label: const Text('Chat'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         ),
                       ],

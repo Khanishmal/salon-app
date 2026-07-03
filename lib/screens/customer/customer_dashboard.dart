@@ -19,6 +19,7 @@ import '../signin_screen.dart';
 import 'inbox_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
+import 'services_menu_screen.dart';
 
 class CustomerDashboard extends StatefulWidget {
   const CustomerDashboard({super.key});
@@ -36,8 +37,8 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     super.initState();
     _navigationPages = [
       const DashboardHomeView(),
-      const NearbySalonsScreen(),
-      const BookingCalendarScreen(),
+      const ServicesMenuScreen(),
+      const ProductShopScreen(),
       const InboxScreen(),
     ];
   }
@@ -86,17 +87,17 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
               BottomNavigationBarItem(
                 icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.dashboard_customize_outlined, size: 22)),
                 activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.dashboard_customize, size: 22)),
-                label: 'Dashboard',
+                label: 'Home',
               ),
               BottomNavigationBarItem(
-                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.map_outlined, size: 22)),
-                activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.map, size: 22)),
-                label: 'Nearby',
+                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.spa_outlined, size: 22)),
+                activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.spa, size: 22)),
+                label: 'Services',
               ),
               BottomNavigationBarItem(
-                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.calendar_month_outlined, size: 22)),
-                activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.calendar_month, size: 22)),
-                label: 'Bookings',
+                icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.shopping_bag_outlined, size: 22)),
+                activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.shopping_bag, size: 22)),
+                label: 'Shop',
               ),
               BottomNavigationBarItem(
                 icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.forum_outlined, size: 22)),
@@ -110,6 +111,8 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
     );
   }
 }
+
+// DashboardHomeView remains the same as before...
 
 class DashboardHomeView extends StatelessWidget {
   const DashboardHomeView({super.key});
@@ -681,11 +684,3 @@ class DashboardHomeView extends StatelessWidget {
   }
 }
 
-// =========================================================================
-// FALLBACK CLASSES - Replace with actual implementations
-// =========================================================================
-class ServicesMenuScreen extends StatelessWidget {
-  const ServicesMenuScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Services Menu Screen")));
-}

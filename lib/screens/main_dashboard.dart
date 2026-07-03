@@ -1,17 +1,24 @@
 // lib/screens/main_dashboard.dart
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'signin_screen.dart'; 
 import 'vendor/vendor_screen.dart'; 
-import 'customer/ar_makeup_screen.dart'; // Ensure this matches your project directory path
-import 'signup_screen.dart'; // Ensure this matches your project directory path
+import 'customer/ar_makeup_screen.dart';
+import 'customer/customer_dashboard.dart';
+import 'customer/product_shop.dart';
+import 'customer/booking_calendar.dart';
+import 'signup_screen.dart';
+import 'help_screen.dart';
+import 'customer/services_menu_screen.dart';
+
 class GlowSalonDashboard extends StatelessWidget {
   const GlowSalonDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFD), // Premium clean light layout canvas
+      backgroundColor: const Color(0xFFFBFBFD),
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(75),
@@ -28,15 +35,14 @@ class GlowSalonDashboard extends StatelessWidget {
           ],
         ),
       ),
-      floatingActionButton: _buildChatButton(context),
+      floatingActionButton: _buildHelpButton(context),
     );
   }
 
-  // --- 1. GLASSMORPHIC APP BAR ---
   Widget _buildGlassAppBar(BuildContext context) {
     return ClipRRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16), // Premium high blur definition
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: AppBar(
           backgroundColor: Colors.white.withOpacity(0.65),
           elevation: 0,
@@ -53,11 +59,11 @@ class GlowSalonDashboard extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () {}, 
+              onPressed: () => _navigateToServices(context), 
               child: const Text("Services", style: TextStyle(color: Color(0xFF424245), fontWeight: FontWeight.w500)),
             ),
             TextButton(
-              onPressed: () {}, 
+              onPressed: () => _navigateToShop(context), 
               child: const Text("Shop", style: TextStyle(color: Color(0xFF424245), fontWeight: FontWeight.w500)),
             ),
             const SizedBox(width: 8),
@@ -87,7 +93,65 @@ class GlowSalonDashboard extends StatelessWidget {
     );
   }
 
-  // --- 2. HERO SECTION ---
+  void _navigateToServices(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ServicesMenuScreen(),
+        ),
+      );
+    } else {
+      _showSignInPrompt(context, 'Please sign in to view services');
+    }
+  }
+
+  void _navigateToShop(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ProductShopScreen(),
+        ),
+      );
+    } else {
+      _showSignInPrompt(context, 'Please sign in to shop');
+    }
+  }
+
+  void _showSignInPrompt(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign In Required'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SignInScreen(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF2845C),
+            ),
+            child: const Text('Sign In'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeroSection(BuildContext context) {
     return Container(
       height: 650,
@@ -142,11 +206,10 @@ class GlowSalonDashboard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Container(
-                    // FIXED: Implemented correct layout constraints using BoxConstraints instead of an invalid parameter
                     constraints: const BoxConstraints(maxWidth: 180),
                     margin: const EdgeInsets.only(right: 8),
                     child: ElevatedButton(
-                      onPressed: () {},
+                      onPressed: () => _handleBookNow(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFF2845C),
                         foregroundColor: Colors.white,
@@ -161,11 +224,10 @@ class GlowSalonDashboard extends StatelessWidget {
                 ),
                 Expanded(
                   child: Container(
-                    // FIXED: Implemented correct layout constraints using BoxConstraints instead of an invalid parameter
                     constraints: const BoxConstraints(maxWidth: 180),
                     margin: const EdgeInsets.only(left: 8),
                     child: OutlinedButton(
-                      onPressed: () {},
+                      onPressed: () => _handleExplore(context),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.white, width: 1.5),
                         foregroundColor: Colors.white,
@@ -184,7 +246,34 @@ class GlowSalonDashboard extends StatelessWidget {
     );
   }
 
-  // --- 3. SERVICES GRID ---
+  void _handleBookNow(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const BookingCalendarScreen(),
+        ),
+      );
+    } else {
+      _showSignInPrompt(context, 'Please sign in to book an appointment');
+    }
+  }
+
+  void _handleExplore(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const CustomerDashboard(),
+        ),
+      );
+    } else {
+      _showSignInPrompt(context, 'Please sign in to explore');
+    }
+  }
+
   Widget _buildServicesSection(BuildContext context) {
     final services = [
       {'icon': Icons.content_cut, 'title': 'Hair Styling'},
@@ -238,11 +327,30 @@ class GlowSalonDashboard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: () {
-          if (title == 'Makeup') {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ArMakeupScreen()),
-            );
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            if (title == 'Makeup') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ArMakeupScreen()),
+              );
+            } else if (title == 'Spa' || title == 'Facials') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ServicesMenuScreen(),
+                ),
+              );
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BookingCalendarScreen(),
+                ),
+              );
+            }
+          } else {
+            _showSignInPrompt(context, 'Please sign in to book $title');
           }
         },
         child: Container(
@@ -281,7 +389,6 @@ class GlowSalonDashboard extends StatelessWidget {
     );
   }
 
-  // --- 4. PROMO BANNER ---
   Widget _buildPromoBanner(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(24),
@@ -321,7 +428,7 @@ class GlowSalonDashboard extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () => _handleBookNow(context),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white, 
               foregroundColor: const Color(0xFFF2845C),
@@ -336,7 +443,6 @@ class GlowSalonDashboard extends StatelessWidget {
     );
   }
 
-  // --- 5. FOOTER ---
   Widget _buildFooterSection(BuildContext context) {
     return Container(
       color: const Color(0xFF121214), 
@@ -379,48 +485,50 @@ class GlowSalonDashboard extends StatelessWidget {
     );
   }
 
-  // In main_dashboard.dart, update the footer section:
-
-Widget _footerColumn(BuildContext context, String title, List<String> items) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-      const SizedBox(height: 16),
-      ...items.map((item) => GestureDetector(
-        onTap: () {
-          if (item == "Become a Vendor") {
-            // Navigate to SignUp with vendor role pre-selected
-            Navigator.push(
-              context, 
-              MaterialPageRoute(
-                builder: (context) => SignUpScreen(),
-              ),
-            );
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12.0),
-          child: Text(
-            item, 
-            style: const TextStyle(color: Color(0xFFAEAEB2), fontSize: 14, fontWeight: FontWeight.w400),
+  Widget _footerColumn(BuildContext context, String title, List<String> items) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 16),
+        ...items.map((item) => GestureDetector(
+          onTap: () {
+            if (item == "Become a Vendor") {
+              Navigator.push(
+                context, 
+                MaterialPageRoute(
+                  builder: (context) => const SignUpScreen(),
+                ),
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Text(
+              item, 
+              style: const TextStyle(color: Color(0xFFAEAEB2), fontSize: 14, fontWeight: FontWeight.w400),
+            ),
           ),
-        ),
-      )),
-    ],
-  );
-}
+        )),
+      ],
+    );
+  }
 
-  Widget _buildChatButton(BuildContext context) {
+  Widget _buildHelpButton(BuildContext context) {
     return FloatingActionButton(
       backgroundColor: const Color(0xFFF2845C),
       foregroundColor: Colors.white,
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onPressed: () {
-        // Overlay logic for consultation goes here
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const HelpScreen(),
+          ),
+        );
       }, 
-      child: const Icon(Icons.chat_bubble_outline_rounded, size: 24),
+      child: const Icon(Icons.help_outline_rounded, size: 28),
     );
   }
 }

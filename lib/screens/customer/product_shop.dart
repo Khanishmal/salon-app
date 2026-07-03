@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'cart_screen.dart';
 import 'product_detail_screen.dart';
-import 'vendor_chat_screen.dart';
 
 class ProductShopScreen extends StatefulWidget {
   const ProductShopScreen({super.key});
@@ -19,11 +18,10 @@ class _ProductShopScreenState extends State<ProductShopScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String _selectedCategory = 'All';
-  String _selectedVendor = 'All';
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _showGrid = true;
   Map<String, String> _vendorMap = {};
-  Map<String, dynamic> _vendorDataMap = {};
 
   final List<String> _categories = [
     'All',
@@ -57,6 +55,13 @@ class _ProductShopScreenState extends State<ProductShopScreen> {
         backgroundColor: const Color(0xFFF2845C),
         elevation: 0,
         actions: [
+          IconButton(
+            icon: Icon(_showGrid ? Icons.view_list : Icons.grid_view),
+            color: Colors.white,
+            onPressed: () {
+              setState(() => _showGrid = !_showGrid);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.shopping_cart, color: Colors.white),
             onPressed: () {
@@ -131,451 +136,146 @@ class _ProductShopScreenState extends State<ProductShopScreen> {
               },
             ),
           ),
-          // Content: Vendors or Products
+          // Products Grid/List
           Expanded(
-            child: _selectedVendor == 'All'
-                ? _buildVendorList()
-                : _buildProductsGrid(),
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('products')
+                  .where('isActive', isEqualTo: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
+                    ),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
+                        const SizedBox(height: 8),
+                        const Text('Error loading products'),
+                        ElevatedButton(
+                          onPressed: () => setState(() {}),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 60, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No Products Available',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Check back later for new products',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                var products = snapshot.data!.docs;
+
+                // Filter by category
+                if (_selectedCategory != 'All') {
+                  products = products.where((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    String category = data['category'] ?? '';
+                    return category.toLowerCase() == _selectedCategory.toLowerCase();
+                  }).toList();
+                }
+
+                // Filter by search
+                if (_searchQuery.isNotEmpty) {
+                  products = products.where((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    String name = (data['name'] ?? '').toString().toLowerCase();
+                    String category = (data['category'] ?? '').toString().toLowerCase();
+                    String brand = (data['brand'] ?? '').toString().toLowerCase();
+                    return name.contains(_searchQuery) || 
+                           category.contains(_searchQuery) || 
+                           brand.contains(_searchQuery);
+                  }).toList();
+                }
+
+                if (products.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 40, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No products found',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return _showGrid
+                    ? _buildGridProducts(products)
+                    : _buildListProducts(products);
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildVendorList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('users')
-          .where('role', isEqualTo: 'Vendor')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
-            ),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading vendors',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[700],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  snapshot.error.toString(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () => setState(() {}),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF2845C),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.storefront_outlined, size: 60, color: Colors.grey[300]),
-                const SizedBox(height: 16),
-                Text(
-                  'No Vendors Available',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Check back later for new vendors',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.grey[400],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // Show all vendors
-        final vendors = snapshot.data!.docs;
-
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 0.85,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: vendors.length,
-          itemBuilder: (context, index) {
-            var doc = vendors[index];
-            var data = doc.data() as Map<String, dynamic>;
-            String vendorId = doc.id;
-            String vendorName = data['businessName'] ?? data['name'] ?? 'Vendor';
-            double rating = (data['rating'] ?? 0).toDouble();
-            
-            _vendorMap[vendorId] = vendorName;
-            _vendorDataMap[vendorId] = data;
-
-            return _buildVendorCard(
-              vendorId: vendorId,
-              name: vendorName,
-              rating: rating,
-              data: data,
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildVendorCard({
-    required String vendorId,
-    required String name,
-    required double rating,
-    required Map<String, dynamic> data,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedVendor = name;
-        });
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFFDEEE9),
-                image: data['profileImage'] != null && data['profileImage'].toString().isNotEmpty
-                    ? DecorationImage(
-                        image: NetworkImage(data['profileImage']),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-              ),
-              child: data['profileImage'] == null || data['profileImage'].toString().isEmpty
-                  ? Icon(
-                      Icons.storefront,
-                      size: 40,
-                      color: const Color(0xFFF2845C).withOpacity(0.6),
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              name,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Color(0xFF2D3A4B),
-              ),
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.star, color: Colors.amber, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  rating.toStringAsFixed(1),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2845C).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'View Products',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFFF2845C),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Chat with Vendor Button
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => VendorChatScreen(
-                          vendorId: vendorId,
-                          vendorName: name,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          color: Colors.blue[700],
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Chat',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+  Widget _buildGridProducts(List<QueryDocumentSnapshot> products) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.7,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        var doc = products[index];
+        var data = doc.data() as Map<String, dynamic>;
+        return _buildProductCard(doc.id, data);
+      },
     );
   }
 
-  Widget _buildProductsGrid() {
-    return Column(
-      children: [
-        // Header with back button
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Color(0xFFF2845C)),
-                onPressed: () {
-                  setState(() {
-                    _selectedVendor = 'All';
-                  });
-                },
-              ),
-              Expanded(
-                child: Text(
-                  'Products from $_selectedVendor',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3A4B),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.shopping_cart, color: Color(0xFFF2845C)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CartScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: _firestore
-                .collection('products')
-                .where('isActive', isEqualTo: true)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
-                  ),
-                );
-              }
-
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
-                      const SizedBox(height: 8),
-                      const Text('Error loading products'),
-                      ElevatedButton(
-                        onPressed: () => setState(() {}),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inventory_2_outlined, size: 60, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No Products Available',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'This vendor has no products yet',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Colors.grey[400],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              var products = snapshot.data!.docs;
-
-              // Filter by vendor
-              String? vendorId;
-              for (var entry in _vendorMap.entries) {
-                if (entry.value == _selectedVendor) {
-                  vendorId = entry.key;
-                  break;
-                }
-              }
-
-              if (vendorId != null) {
-                products = products.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  return data['vendorId'] == vendorId;
-                }).toList();
-              }
-
-              // Filter by category
-              if (_selectedCategory != 'All') {
-                products = products.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  String category = data['category'] ?? '';
-                  return category.toLowerCase() == _selectedCategory.toLowerCase();
-                }).toList();
-              }
-
-              // Filter by search
-              if (_searchQuery.isNotEmpty) {
-                products = products.where((doc) {
-                  var data = doc.data() as Map<String, dynamic>;
-                  String name = (data['name'] ?? '').toString().toLowerCase();
-                  String category = (data['category'] ?? '').toString().toLowerCase();
-                  String brand = (data['brand'] ?? '').toString().toLowerCase();
-                  return name.contains(_searchQuery) || 
-                         category.contains(_searchQuery) || 
-                         brand.contains(_searchQuery);
-                }).toList();
-              }
-
-              if (products.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.search_off, size: 40, color: Colors.grey[400]),
-                      const SizedBox(height: 8),
-                      Text(
-                        'No products found',
-                        style: GoogleFonts.poppins(
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              return GridView.builder(
-                padding: const EdgeInsets.all(12),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.7,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                ),
-                itemCount: products.length,
-                itemBuilder: (context, index) {
-                  var doc = products[index];
-                  var data = doc.data() as Map<String, dynamic>;
-                  return _buildProductCard(doc.id, data);
-                },
-              );
-            },
-          ),
-        ),
-      ],
+  Widget _buildListProducts(List<QueryDocumentSnapshot> products) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        var doc = products[index];
+        var data = doc.data() as Map<String, dynamic>;
+        return _buildProductListItem(doc.id, data);
+      },
     );
   }
 
@@ -585,7 +285,6 @@ class _ProductShopScreenState extends State<ProductShopScreen> {
     int stock = data['stock'] ?? 0;
     String imageUrl = data['imageUrl'] ?? '';
     String vendorId = data['vendorId'] ?? '';
-    String brand = data['brand'] ?? '';
     String category = data['category'] ?? '';
 
     return GestureDetector(
@@ -725,6 +424,149 @@ class _ProductShopScreenState extends State<ProductShopScreen> {
                       child: Text(
                         stock > 0 ? 'Add to Cart' : 'Out of Stock',
                         style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductListItem(String productId, Map<String, dynamic> data) {
+    String name = data['name'] ?? 'Product';
+    double price = (data['price'] ?? 0).toDouble();
+    int stock = data['stock'] ?? 0;
+    String imageUrl = data['imageUrl'] ?? '';
+    String vendorId = data['vendorId'] ?? '';
+    String category = data['category'] ?? '';
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductDetailScreen(
+              productId: productId,
+              vendorId: vendorId,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDEEE9),
+                borderRadius: BorderRadius.circular(12),
+                image: imageUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(imageUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              child: imageUrl.isEmpty
+                  ? const Icon(Icons.image, color: Color(0xFFF2845C))
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Color(0xFF2D3A4B),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Rs. ${NumberFormat('#,###').format(price)}',
+                    style: const TextStyle(
+                      color: Color(0xFFF2845C),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.inventory,
+                        size: 12,
+                        color: stock > 10 ? Colors.green : Colors.orange,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        stock > 0 ? '$stock in stock' : 'Out of stock',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: stock > 10 ? Colors.green : Colors.orange,
+                        ),
+                      ),
+                      if (category.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            category,
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: 120,
+                    child: ElevatedButton(
+                      onPressed: stock > 0
+                          ? () => _addToCart(productId, name, price, imageUrl, vendorId)
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: stock > 0 ? const Color(0xFFF2845C) : Colors.grey,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        stock > 0 ? 'Add to Cart' : 'Out of Stock',
+                        style: const TextStyle(fontSize: 11),
                       ),
                     ),
                   ),

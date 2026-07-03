@@ -16,61 +16,163 @@ class VendorChatListScreen extends StatefulWidget {
 class _VendorChatListScreenState extends State<VendorChatListScreen> {
   final User? user = FirebaseAuth.instance.currentUser;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Map<String, Map<String, dynamic>> _customerChats = {};
+  Map<String, Map<String, dynamic>> _combinedChats = {};
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadChats();
+    _loadAllChats();
   }
 
-  Future<void> _loadChats() async {
+  Future<void> _loadAllChats() async {
     setState(() => _isLoading = true);
     
     try {
-      // Get all chats where vendor is participant
-      QuerySnapshot snapshot = await _firestore
+      Map<String, Map<String, dynamic>> combinedChats = {};
+      Set<String> uniqueParticipants = {};
+      Map<String, String> customerNames = {};
+      
+      // 1. Load admin messages (from chat_messages collection)
+      QuerySnapshot adminMessages = await _firestore
+          .collection('chat_messages')
+          .where('participants', arrayContains: user?.uid)
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      for (var doc in adminMessages.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+        String? senderId = data['senderId'];
+        String? receiverId = data['receiverId'];
+        
+        String? otherParticipant;
+        if (senderId == user?.uid) {
+          otherParticipant = receiverId;
+        } else {
+          otherParticipant = senderId;
+        }
+        
+        if (otherParticipant == null || otherParticipant == user?.uid) continue;
+        
+        bool isAdmin = otherParticipant == 'admin';
+        String key = isAdmin ? 'admin' : 'customer_$otherParticipant';
+        
+        if (!uniqueParticipants.contains(otherParticipant)) {
+          uniqueParticipants.add(otherParticipant);
+          
+          // Get customer name if not admin
+          String displayName = isAdmin ? 'Admin Support' : 'Customer';
+          if (!isAdmin) {
+            try {
+              DocumentSnapshot userDoc = await _firestore.collection('users').doc(otherParticipant).get();
+              if (userDoc.exists) {
+                var userData = userDoc.data() as Map<String, dynamic>;
+                displayName = userData['name'] ?? 'Customer';
+                customerNames[otherParticipant] = displayName;
+              }
+            } catch (e) {
+              print('Error fetching customer name: $e');
+            }
+          }
+          
+          bool unread = data['read'] == false && data['senderId'] != user?.uid;
+          
+          combinedChats[key] = {
+            'participantId': otherParticipant,
+            'participantName': displayName,
+            'lastMessage': data['message'] ?? '',
+            'timestamp': data['timestamp'] as Timestamp?,
+            'unread': unread,
+            'isAdmin': isAdmin,
+            'docId': doc.id,
+          };
+        } else {
+          // Update if newer message
+          var existing = combinedChats[key];
+          var existingTimestamp = existing?['timestamp'] as Timestamp?;
+          var newTimestamp = data['timestamp'] as Timestamp?;
+          
+          if (newTimestamp != null && (existingTimestamp == null || newTimestamp.compareTo(existingTimestamp) > 0)) {
+            bool unread = data['read'] == false && data['senderId'] != user?.uid;
+            combinedChats[key] = {
+              'participantId': otherParticipant,
+              'participantName': existing?['participantName'] ?? 'Customer',
+              'lastMessage': data['message'] ?? '',
+              'timestamp': newTimestamp,
+              'unread': unread,
+              'isAdmin': isAdmin,
+              'docId': doc.id,
+            };
+          }
+        }
+      }
+
+      // 2. Load customer chat messages (from customer_vendor_chat collection)
+      QuerySnapshot customerChats = await _firestore
           .collection('customer_vendor_chat')
           .where('participants', arrayContains: user?.uid)
           .orderBy('timestamp', descending: true)
           .get();
 
-      Map<String, Map<String, dynamic>> chats = {};
-      
-      for (var doc in snapshot.docs) {
+      for (var doc in customerChats.docs) {
         var data = doc.data() as Map<String, dynamic>;
-        String customerId = data['customerId'] ?? '';
+        String? customerId = data['customerId'];
         
-        if (customerId.isNotEmpty) {
-          if (!chats.containsKey(customerId)) {
-            chats[customerId] = {
-              'customerId': customerId,
+        if (customerId == null || customerId == user?.uid) continue;
+        
+        String key = 'customer_$customerId';
+        
+        // Get customer name if not already fetched
+        String displayName = customerNames[customerId] ?? 'Customer';
+        if (!customerNames.containsKey(customerId)) {
+          try {
+            DocumentSnapshot userDoc = await _firestore.collection('users').doc(customerId).get();
+            if (userDoc.exists) {
+              var userData = userDoc.data() as Map<String, dynamic>;
+              displayName = userData['name'] ?? 'Customer';
+              customerNames[customerId] = displayName;
+            }
+          } catch (e) {
+            print('Error fetching customer name: $e');
+          }
+        }
+        
+        if (!uniqueParticipants.contains(customerId)) {
+          uniqueParticipants.add(customerId);
+          bool unread = data['read'] == false && data['senderId'] != user?.uid;
+          
+          combinedChats[key] = {
+            'participantId': customerId,
+            'participantName': displayName,
+            'lastMessage': data['message'] ?? '',
+            'timestamp': data['timestamp'] as Timestamp?,
+            'unread': unread,
+            'isAdmin': false,
+            'docId': doc.id,
+          };
+        } else {
+          // Update if newer message
+          var existing = combinedChats[key];
+          var existingTimestamp = existing?['timestamp'] as Timestamp?;
+          var newTimestamp = data['timestamp'] as Timestamp?;
+          
+          if (newTimestamp != null && (existingTimestamp == null || newTimestamp.compareTo(existingTimestamp) > 0)) {
+            bool unread = data['read'] == false && data['senderId'] != user?.uid;
+            combinedChats[key] = {
+              'participantId': customerId,
+              'participantName': displayName,
               'lastMessage': data['message'] ?? '',
-              'timestamp': data['timestamp'] as Timestamp?,
-              'unread': data['read'] == false && data['senderId'] != user?.uid,
+              'timestamp': newTimestamp,
+              'unread': unread,
+              'isAdmin': false,
               'docId': doc.id,
             };
-          } else {
-            var existing = chats[customerId];
-            var existingTimestamp = existing?['timestamp'] as Timestamp?;
-            var newTimestamp = data['timestamp'] as Timestamp?;
-            
-            if (newTimestamp != null && (existingTimestamp == null || newTimestamp.compareTo(existingTimestamp) > 0)) {
-              chats[customerId] = {
-                'customerId': customerId,
-                'lastMessage': data['message'] ?? '',
-                'timestamp': newTimestamp,
-                'unread': data['read'] == false && data['senderId'] != user?.uid,
-                'docId': doc.id,
-              };
-            }
           }
         }
       }
 
       setState(() {
-        _customerChats = chats;
+        _combinedChats = combinedChats;
         _isLoading = false;
       });
     } catch (e) {
@@ -78,6 +180,42 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading chats: ${e.toString()}')),
       );
+    }
+  }
+
+  // Mark messages as read when tapping on a chat
+  Future<void> _markMessagesAsRead(String participantId, bool isAdmin) async {
+    try {
+      if (isAdmin) {
+        // Mark admin messages as read
+        QuerySnapshot snapshot = await _firestore
+            .collection('chat_messages')
+            .where('participants', arrayContains: user?.uid)
+            .where('senderId', isEqualTo: 'admin')
+            .where('read', isEqualTo: false)
+            .get();
+        
+        for (var doc in snapshot.docs) {
+          await doc.reference.update({'read': true});
+        }
+      } else {
+        // Mark customer messages as read
+        QuerySnapshot snapshot = await _firestore
+            .collection('customer_vendor_chat')
+            .where('participants', arrayContains: user?.uid)
+            .where('senderId', isEqualTo: participantId)
+            .where('read', isEqualTo: false)
+            .get();
+        
+        for (var doc in snapshot.docs) {
+          await doc.reference.update({'read': true});
+        }
+      }
+      
+      // Reload chats to update unread status
+      await _loadAllChats();
+    } catch (e) {
+      print('Error marking messages as read: $e');
     }
   }
 
@@ -97,7 +235,7 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadChats,
+            onPressed: _loadAllChats,
           ),
         ],
       ),
@@ -107,7 +245,7 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
                 valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
               ),
             )
-          : _customerChats.isEmpty
+          : _combinedChats.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -123,7 +261,7 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Customers will contact you here',
+                        'Chat with admin or customers',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           color: Colors.grey[400],
@@ -134,42 +272,115 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(12),
-                  itemCount: _customerChats.length,
+                  itemCount: _combinedChats.length,
                   itemBuilder: (context, index) {
-                    var entry = _customerChats.entries.elementAt(index);
-                    var customerId = entry.key;
-                    var data = entry.value;
+                    var entry = _combinedChats.entries.elementAt(index);
+                    var chatData = entry.value;
+                    String participantId = chatData['participantId'] ?? '';
+                    bool isAdmin = chatData['isAdmin'] ?? false;
+                    String participantName = chatData['participantName'] ?? 'Customer';
                     
-                    return FutureBuilder<DocumentSnapshot>(
-                      future: _firestore.collection('users').doc(customerId).get(),
-                      builder: (context, userSnapshot) {
-                        String customerName = 'Customer';
-                        if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                          var userData = userSnapshot.data!.data() as Map<String, dynamic>;
-                          customerName = userData['name'] ?? 'Customer';
-                        }
-
-                        return _buildChatTile(
-                          customerId: customerId,
-                          customerName: customerName,
-                          lastMessage: data['lastMessage'] ?? '',
-                          timestamp: data['timestamp'] as Timestamp?,
-                          unread: data['unread'] ?? false,
-                        );
-                      },
-                    );
+                    return isAdmin 
+                        ? _buildAdminChatTile(chatData)
+                        : _buildChatTile(
+                            participantId: participantId,
+                            participantName: participantName,
+                            chatData: chatData,
+                          );
                   },
                 ),
     );
   }
 
+  Widget _buildAdminChatTile(Map<String, dynamic> chatData) {
+    String lastMessage = chatData['lastMessage'] ?? '';
+    Timestamp? timestamp = chatData['timestamp'] as Timestamp?;
+    bool unread = chatData['unread'] ?? false;
+    
+    String formattedDate = timestamp != null
+        ? DateFormat('MMM d, h:mm a').format(timestamp.toDate())
+        : '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: unread ? const Color(0xFFF2845C) : Colors.grey[300],
+          child: const Icon(Icons.admin_panel_settings, color: Colors.white),
+        ),
+        title: const Text(
+          'Admin Support',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          lastMessage,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: unread ? Colors.black : Colors.grey[600],
+            fontWeight: unread ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (timestamp != null)
+              Text(
+                formattedDate,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey[500],
+                ),
+              ),
+            if (unread)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2845C),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'NEW',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        onTap: () async {
+          await _markMessagesAsRead('admin', true);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VendorChatScreen(
+                vendorId: user?.uid ?? '',
+                vendorName: 'Admin Support',
+                customerId: 'admin',
+                isAdminChat: true,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildChatTile({
-    required String customerId,
-    required String customerName,
-    required String lastMessage,
-    Timestamp? timestamp,
-    required bool unread,
+    required String participantId,
+    required String participantName,
+    required Map<String, dynamic> chatData,
   }) {
+    String lastMessage = chatData['lastMessage'] ?? '';
+    Timestamp? timestamp = chatData['timestamp'] as Timestamp?;
+    bool unread = chatData['unread'] ?? false;
+    
     String formattedDate = timestamp != null
         ? DateFormat('MMM d, h:mm a').format(timestamp.toDate())
         : '';
@@ -183,7 +394,7 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
         leading: CircleAvatar(
           backgroundColor: unread ? const Color(0xFFF2845C) : Colors.grey[300],
           child: Text(
-            customerName.isNotEmpty ? customerName[0].toUpperCase() : 'C',
+            participantName.isNotEmpty ? participantName[0].toUpperCase() : 'C',
             style: TextStyle(
               color: unread ? Colors.white : Colors.grey[700],
               fontWeight: FontWeight.bold,
@@ -191,7 +402,7 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
           ),
         ),
         title: Text(
-          customerName,
+          participantName,
           style: TextStyle(
             fontWeight: unread ? FontWeight.bold : FontWeight.normal,
           ),
@@ -235,14 +446,16 @@ class _VendorChatListScreenState extends State<VendorChatListScreen> {
               ),
           ],
         ),
-        onTap: () {
+        onTap: () async {
+          await _markMessagesAsRead(participantId, false);
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => VendorChatScreen(
                 vendorId: user?.uid ?? '',
-                vendorName: 'Vendor',
-                customerId: customerId,
+                vendorName: participantName,
+                customerId: participantId,
+                isAdminChat: false,
               ),
             ),
           );

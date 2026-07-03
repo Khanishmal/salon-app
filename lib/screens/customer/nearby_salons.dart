@@ -1,10 +1,12 @@
-// lib/screens/customer_modules/nearby_salons.dart
+// lib/screens/customer/nearby_salons.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/location_service.dart';
+import 'booking_calendar.dart';
 
 class NearbySalonsScreen extends StatefulWidget {
   const NearbySalonsScreen({super.key});
@@ -14,149 +16,154 @@ class NearbySalonsScreen extends StatefulWidget {
 }
 
 class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
+  static const _defaultCenter = LatLng(24.8607, 67.0011); // Karachi fallback
+
   bool _isMapView = false;
-  bool _isLoadingLocation = true;
-  String _locationStatusMessage = "Initializing tracking services...";
-  
+  bool _isLoading = true;
+  bool _isGeocodingSearch = false;
+  String _statusMessage = 'Finding your location...';
+  LocationAccessStatus? _accessStatus;
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  
+
   LatLng? _currentPosition;
+  LatLng? _searchCenter;
   GoogleMapController? _mapController;
-  
-  // Real-time local memory structures
+
   List<DocumentSnapshot> _allSalons = [];
   List<DocumentSnapshot> _filteredSalons = [];
+  final Map<String, LatLng> _geocodedCoords = {};
   final Set<Marker> _markers = {};
-  
+
   StreamSubscription<QuerySnapshot>? _salonStreamSubscription;
 
   @override
   void initState() {
     super.initState();
-    _determineAndRequestPermission();
     _searchController.addListener(_onSearchChanged);
+    _initializeLocationAndSalons();
   }
 
   void _onSearchChanged() {
     setState(() {
-      _searchQuery = _searchController.text.toLowerCase();
+      _searchQuery = _searchController.text.toLowerCase().trim();
       _applyFilteringAndSorting();
     });
   }
 
-  /// Explicitly handles the location lifecycle based on geolocator status rules
-  Future<void> _determineAndRequestPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
+  Future<void> _initializeLocationAndSalons() async {
     setState(() {
-      _isLoadingLocation = true;
-      _locationStatusMessage = "Checking location service state...";
+      _isLoading = true;
+      _statusMessage = 'Checking location access...';
     });
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _updateLoadingState("Location services are disabled on your device. Please turn them on.");
-      return;
+    final access = await LocationService.ensureAccess();
+    _accessStatus = access.status;
+
+    if (access.isGranted) {
+      setState(() => _statusMessage = 'Getting your location...');
+      _currentPosition = await LocationService.getCurrentPosition();
     }
 
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _updateLoadingState("Location access permission denied. Enable it to view local salons.");
-        return;
-      }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      _updateLoadingState("Location permissions are permanently blocked. Please enable them in your device settings.");
-      return;
-    }
+    if (!mounted) return;
 
-    // Capture precise coordinates using high accuracy tracking parameters
-    try {
-      setState(() => _locationStatusMessage = "Locking onto satellites...");
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 8),
-      );
-      
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      _initializeRealTimeSalonStream();
-    } catch (e) {
-      // Fallback configuration if positioning takes too long or fails
-      Position? lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown != null) {
-        _currentPosition = LatLng(lastKnown.latitude, lastKnown.longitude);
-        _initializeRealTimeSalonStream();
+    if (_currentPosition == null) {
+      _currentPosition = _defaultCenter;
+      if (!access.isGranted) {
+        _statusMessage = access.message ?? 'Using default map area.';
       } else {
-        _updateLoadingState("Unable to lock precision coordinates. Retrying structural pipeline...");
+        _statusMessage = 'Could not get GPS fix. Showing default map area.';
+      }
+    }
+
+    _startSalonStream();
+  }
+
+  void _startSalonStream() {
+    setState(() => _statusMessage = 'Loading nearby salons...');
+
+    _salonStreamSubscription?.cancel();
+    _salonStreamSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'Vendor')
+        .snapshots()
+        .listen((snapshot) async {
+      _allSalons = snapshot.docs;
+      await _resolveMissingCoordinates();
+      if (mounted) {
+        _applyFilteringAndSorting();
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }, onError: (error) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _statusMessage = 'Could not load salons: $error';
+        });
+      }
+    });
+  }
+
+  Future<void> _resolveMissingCoordinates() async {
+    for (final doc in _allSalons) {
+      if (_geocodedCoords.containsKey(doc.id)) continue;
+
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final existing = LocationService.parseCoordinates(data);
+      if (existing != null) {
+        _geocodedCoords[doc.id] = existing;
+        continue;
+      }
+
+      final address = (data['address'] ?? '').toString().trim();
+      if (address.isEmpty) continue;
+
+      final coords = await LocationService.geocodeAddress(address);
+      if (coords != null) {
+        _geocodedCoords[doc.id] = coords;
       }
     }
   }
 
-  void _updateLoadingState(String message) {
-    setState(() {
-      _locationStatusMessage = message;
-      _isLoadingLocation = false;
-    });
+  Map<String, dynamic> _salonData(DocumentSnapshot doc) {
+    return doc.data() as Map<String, dynamic>? ?? {};
   }
 
-  /// Binds a continuous listener directly to Firestore
-  void _initializeRealTimeSalonStream() {
-    setState(() => _locationStatusMessage = "Synchronizing local salons...");
-    
-    _salonStreamSubscription = FirebaseFirestore.instance
-        .collection('salons')
-        .snapshots()
-        .listen((QuerySnapshot snapshot) {
-          _allSalons = snapshot.docs;
-          _applyFilteringAndSorting();
-          if (mounted) {
-            setState(() => _isLoadingLocation = false);
-          }
-        }, onError: (error) {
-          _updateLoadingState("Database sync error: $error");
-        });
+  LatLng? _salonCoordinates(DocumentSnapshot doc) {
+    final data = _salonData(doc);
+    return LocationService.parseCoordinates(data) ?? _geocodedCoords[doc.id];
   }
 
-  /// Processes math constraints, query filtering, and high-rating recommendations
+  LatLng get _mapCenter => _searchCenter ?? _currentPosition ?? _defaultCenter;
+
   void _applyFilteringAndSorting() {
-    if (_currentPosition == null) return;
+    var workingList = List<DocumentSnapshot>.from(_allSalons);
 
-    List<DocumentSnapshot> workingList = List.from(_allSalons);
-
-    // 1. Text Query Filter Evaluation
     if (_searchQuery.isNotEmpty) {
       workingList = workingList.where((doc) {
-        final data = doc.data() as Map<String, dynamic>? ?? {};
-        final name = (data['name'] ?? '').toString().toLowerCase();
+        final data = _salonData(doc);
+        final name = (data['businessName'] ?? data['name'] ?? '').toString().toLowerCase();
         final address = (data['address'] ?? '').toString().toLowerCase();
         return name.contains(_searchQuery) || address.contains(_searchQuery);
       }).toList();
     }
 
-    // 2. Automated Smart Recommendation Sorting Routine
-    // Priority Vector rule: (Is Recommended based on proximity < 5km AND rating >= 4.5) -> Sorts directly to the top
     workingList.sort((a, b) {
-      final dataA = a.data() as Map<String, dynamic>? ?? {};
-      final dataB = b.data() as Map<String, dynamic>? ?? {};
+      final dataA = _salonData(a);
+      final dataB = _salonData(b);
+      final distA = _distanceKm(dataA, doc: a) ?? double.maxFinite;
+      final distB = _distanceKm(dataB, doc: b) ?? double.maxFinite;
 
-      final double distA = _getDirectDistanceKM(dataA);
-      final double distB = _getDirectDistanceKM(dataB);
-      
-      final double ratingA = double.tryParse((dataA['rating'] ?? '0').toString()) ?? 0.0;
-      final double ratingB = double.tryParse((dataB['rating'] ?? '0').toString()) ?? 0.0;
+      final ratingA = _toDouble(dataA['rating']) ?? 0.0;
+      final ratingB = _toDouble(dataB['rating']) ?? 0.0;
+      final isRecA = distA <= 5.0 && ratingA >= 4.5;
+      final isRecB = distB <= 5.0 && ratingB >= 4.5;
 
-      final bool isRecA = distA <= 5.0 && ratingA >= 4.5;
-      final bool isRecB = distB <= 5.0 && ratingB >= 4.5;
-
-      if (isRecA && !isRecB) return -1; // Pull item A upward
-      if (!isRecA && isRecB) return 1;  // Push item A downward
-      
-      // Secondary sorting metric fallback: Closest distance rank mapping
+      if (isRecA && !isRecB) return -1;
+      if (!isRecA && isRecB) return 1;
       return distA.compareTo(distB);
     });
 
@@ -164,64 +171,149 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
     _rebuildMapPins();
   }
 
-  /// Calculates the spherical coordinate distances using the Haversine formula
-  double _getDirectDistanceKM(Map<String, dynamic> salonData) {
-    if (_currentPosition == null) return double.maxFinite;
-    final double lat = double.tryParse(salonData['latitude']?.toString() ?? '0') ?? 0.0;
-    final double lng = double.tryParse(salonData['longitude']?.toString() ?? '0') ?? 0.0;
-    
-    if (lat == 0.0 || lng == 0.0) return double.maxFinite;
+  double? _distanceKm(Map<String, dynamic> data, {required DocumentSnapshot doc}) {
+    final coords = _salonCoordinates(doc);
+    if (_currentPosition == null || coords == null) return null;
 
-    return Geolocator.distanceBetween(
-      _currentPosition!.latitude,
-      _currentPosition!.longitude,
-      lat,
-      lng,
-    ) / 1000.0;
+    return LocationService.distanceKm(_currentPosition, {
+      'latitude': coords.latitude,
+      'longitude': coords.longitude,
+    });
   }
 
-  /// Rebuilds map tracking descriptors cleanly from the current state
   void _rebuildMapPins() {
     _markers.clear();
-    
-    // Add User Current Coordinates Anchor Pin
-    if (_currentPosition != null) {
+
+    if (_accessStatus != LocationAccessStatus.granted && _currentPosition != null) {
       _markers.add(
         Marker(
           markerId: const MarkerId('current_user_position'),
           position: _currentPosition!,
-          infoWindow: const InfoWindow(title: "Your Location"),
+          infoWindow: const InfoWindow(title: 'Your Location'),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
         ),
       );
     }
 
-    // Add dynamically evaluated Salon Anchor Nodes
-    for (var doc in _filteredSalons) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
-      final double lat = double.tryParse(data['latitude']?.toString() ?? '0') ?? 0.0;
-      final double lng = double.tryParse(data['longitude']?.toString() ?? '0') ?? 0.0;
-      final double rating = double.tryParse((data['rating'] ?? '0').toString()) ?? 0.0;
-      final double distance = _getDirectDistanceKM(data);
+    for (final doc in _filteredSalons) {
+      final data = _salonData(doc);
+      final coords = _salonCoordinates(doc);
+      if (coords == null) continue;
 
-      if (lat == 0.0 || lng == 0.0) continue;
-
-      final bool highQualityRecommendation = distance <= 5.0 && rating >= 4.5;
+      final rating = _toDouble(data['rating']) ?? 0.0;
+      final distance = _distanceKm(data, doc: doc);
+      final isRecommended = distance != null && distance <= 5.0 && rating >= 4.5;
+      final name = data['businessName'] ?? data['name'] ?? 'Salon';
 
       _markers.add(
         Marker(
           markerId: MarkerId(doc.id),
-          position: LatLng(lat, lng),
+          position: coords,
           infoWindow: InfoWindow(
-            title: "${data['name'] ?? 'Salon'} ${highQualityRecommendation ? '🔥 (Top Pick)' : ''}",
-            snippet: "${distance.toStringAsFixed(1)} km away | ⭐ $rating",
+            title: isRecommended ? '$name (Top Pick)' : name,
+            snippet: distance != null
+                ? '${distance.toStringAsFixed(1)} km away | ${rating.toStringAsFixed(1)} stars'
+                : (data['address'] ?? '').toString(),
           ),
           icon: BitmapDescriptor.defaultMarkerWithHue(
-            highQualityRecommendation ? BitmapDescriptor.hueRose : BitmapDescriptor.hueOrange,
+            isRecommended ? BitmapDescriptor.hueRose : BitmapDescriptor.hueOrange,
           ),
+          onTap: () => _openDirections(coords),
         ),
       );
     }
+  }
+
+  Future<void> _searchByAddress() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+
+    setState(() => _isGeocodingSearch = true);
+
+    final coords = await LocationService.geocodeAddress(query);
+    if (!mounted) return;
+
+    setState(() => _isGeocodingSearch = false);
+
+    if (coords == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find that location.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _searchCenter = coords;
+      _isMapView = true;
+    });
+
+    await _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(coords, 13.5),
+    );
+  }
+
+  Future<void> _openDirections(LatLng destination) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _recenterOnUser() async {
+    final access = await LocationService.ensureAccess();
+    if (!access.isGranted) {
+      _showLocationHelp(access);
+      return;
+    }
+
+    final position = await LocationService.getCurrentPosition();
+    if (position == null || !mounted) return;
+
+    setState(() {
+      _currentPosition = position;
+      _searchCenter = null;
+    });
+    _applyFilteringAndSorting();
+    await _mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(position, 13.5),
+    );
+  }
+
+  void _showLocationHelp(LocationAccessResult access) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Location needed'),
+        content: Text(access.message ?? 'Please enable location to use this feature.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          if (access.status == LocationAccessStatus.serviceDisabled)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                LocationService.openLocationSettings();
+              },
+              child: const Text('Open settings'),
+            ),
+          if (access.status == LocationAccessStatus.permissionDeniedForever)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                LocationService.openAppSettings();
+              },
+              child: const Text('App settings'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 
   @override
@@ -240,7 +332,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         title: Text(
-          "Discover Salons",
+          'Discover Salons',
           style: GoogleFonts.poppins(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -248,54 +340,87 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
           ),
         ),
         actions: [
-          if (!_isLoadingLocation && _currentPosition != null)
+          if (!_isLoading)
             IconButton(
-              icon: Icon(_isMapView ? Icons.format_list_bulleted : Icons.map_outlined, color: const Color(0xFFF2845C)),
+              icon: Icon(
+                _isMapView ? Icons.format_list_bulleted : Icons.map_outlined,
+                color: const Color(0xFFF2845C),
+              ),
               onPressed: () => setState(() => _isMapView = !_isMapView),
             ),
         ],
       ),
-      body: _isLoadingLocation 
-          ? _buildLoadingStateOverlay()
+      body: _isLoading
+          ? _buildLoadingState()
           : Column(
               children: [
+                if (_accessStatus != null && _accessStatus != LocationAccessStatus.granted)
+                  _buildLocationBanner(),
                 _buildSearchBar(),
                 Expanded(
                   child: _isMapView ? _buildMapView() : _buildListView(),
                 ),
               ],
             ),
+      floatingActionButton: _isMapView && !_isLoading
+          ? FloatingActionButton(
+              onPressed: _recenterOnUser,
+              backgroundColor: const Color(0xFFF2845C),
+              child: const Icon(Icons.my_location, color: Colors.white),
+            )
+          : null,
     );
   }
 
-  Widget _buildLoadingStateOverlay() {
+  Widget _buildLocationBanner() {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF3EE),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.location_off_outlined, color: Color(0xFFF2845C), size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _statusMessage,
+              style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF7A4A3A)),
+            ),
+          ),
+          TextButton(
+            onPressed: _initializeLocationAndSalons,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(
-              width: 50, height: 50,
-              child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)), strokeWidth: 3.5),
+              width: 50,
+              height: 50,
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
+                strokeWidth: 3.5,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
-              _locationStatusMessage,
+              _statusMessage,
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[700], fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _determineAndRequestPermission,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text("Retry Connection"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF2845C),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -309,16 +434,35 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       child: TextField(
         controller: _searchController,
         style: GoogleFonts.poppins(fontSize: 14),
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => _searchByAddress(),
         decoration: InputDecoration(
-          hintText: "Search local hubs or addresses...",
+          hintText: 'Search salons or enter an area...',
           prefixIcon: const Icon(Icons.search, color: Color(0xFFF2845C)),
-          suffixIcon: _searchController.text.isNotEmpty 
-              ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => _searchController.clear())
-              : null,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+          suffixIcon: _isGeocodingSearch
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : (_searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchCenter = null);
+                      },
+                    )
+                  : null),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: BorderSide.none,
+          ),
           filled: true,
           fillColor: const Color(0xFFF1F3F4),
-          contentPadding: const EdgeInsets.symmetric(vertical: 0),
         ),
       ),
     );
@@ -327,7 +471,10 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
   Widget _buildListView() {
     if (_filteredSalons.isEmpty) {
       return Center(
-        child: Text("No salons found nearby matching your request.", style: GoogleFonts.poppins(color: Colors.grey, fontSize: 14)),
+        child: Text(
+          'No salons found nearby.',
+          style: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+        ),
       );
     }
 
@@ -336,11 +483,12 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       itemCount: _filteredSalons.length,
       itemBuilder: (context, index) {
         final doc = _filteredSalons[index];
-        final data = doc.data() as Map<String, dynamic>? ?? {};
-        
-        final double distance = _getDirectDistanceKM(data);
-        final double rating = double.tryParse((data['rating'] ?? '4.5').toString()) ?? 4.5;
-        final bool isRecommended = distance <= 5.0 && rating >= 4.5;
+        final data = _salonData(doc);
+        final coords = _salonCoordinates(doc);
+        final distance = _distanceKm(data, doc: doc);
+        final rating = _toDouble(data['rating']) ?? 4.5;
+        final isRecommended = distance != null && distance <= 5.0 && rating >= 4.5;
+        final name = data['businessName'] ?? data['name'] ?? 'Salon Hub';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -348,121 +496,135 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 12, offset: const Offset(0, 6)),
-            ],
-            border: isRecommended ? Border.all(color: const Color(0xFFF2845C).withOpacity(0.4), width: 1.5) : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                    child: Image.network(
-                      data['imageUrl'] ?? 'https://via.placeholder.com/400x200',
-                      height: 160,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 160, color: Colors.grey[100],
-                        child: const Icon(Icons.storefront, size: 48, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                  if (isRecommended)
-                    Positioned(
-                      top: 12, left: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFFF2845C), Color(0xFFE05A47)]),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.thumb_up, color: Colors.white, size: 12),
-                            const SizedBox(width: 6),
-                            Text("HIGHLY RECOMMENDED", style: GoogleFonts.poppins(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
               ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+            ],
+            border: isRecommended
+                ? Border.all(color: const Color(0xFFF2845C).withOpacity(0.4), width: 1.5)
+                : null,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3EE),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.storefront, color: Color(0xFFF2845C)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: GoogleFonts.poppins(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1A1A1A),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            data['address'] ?? 'Address unavailable',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3EE),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.star, color: Color(0xFFF2845C), size: 15),
+                          const SizedBox(width: 4),
+                          Text(
+                            rating.toStringAsFixed(1),
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: const Color(0xFFF2845C),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24, thickness: 0.8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                data['name'] ?? 'Salon Hub',
-                                style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.bold, color: const Color(0xFF1A1A1A)),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                data['address'] ?? 'Address details unavailable',
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
-                              ),
-                            ],
+                        const Icon(Icons.navigation_outlined, size: 16, color: Color(0xFFF2845C)),
+                        const SizedBox(width: 4),
+                        Text(
+                          distance != null
+                              ? '${distance.toStringAsFixed(1)} km away'
+                              : (coords != null ? 'Distance unavailable' : 'Location pending'),
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(color: const Color(0xFFFFF3EE), borderRadius: BorderRadius.circular(10)),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.star, color: Color(0xFFF2845C), size: 15),
-                              const SizedBox(width: 4),
-                              Text(rating.toStringAsFixed(1), style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 13, color: const Color(0xFFF2845C))),
-                            ],
-                          ),
-                        )
                       ],
                     ),
-                    const Divider(height: 24, thickness: 0.8),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.navigation_outlined, size: 16, color: Color(0xFFF2845C)),
-                            const SizedBox(width: 4),
-                            Text(
-                              distance == double.maxFinite ? "Calculating distance..." : "${distance.toStringAsFixed(1)} km away",
-                              style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
+                        if (coords != null)
+                          TextButton(
+                            onPressed: () => _openDirections(coords),
+                            child: const Text('Directions'),
+                          ),
                         ElevatedButton(
                           onPressed: () {
-                            // Link into reservation configuration views safely passing the document identifier mapping rules
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const BookingCalendarScreen(),
+                              ),
+                            );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFF2845C),
                             foregroundColor: Colors.white,
                             elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: Text("Book", style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
-                        )
+                          child: Text(
+                            'Book',
+                            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
                       ],
-                    )
+                    ),
                   ],
                 ),
-              )
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -471,12 +633,13 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
 
   Widget _buildMapView() {
     return GoogleMap(
-      initialCameraPosition: CameraPosition(target: _currentPosition!, zoom: 13.5),
+      initialCameraPosition: CameraPosition(target: _mapCenter, zoom: 13.5),
       markers: _markers,
-      myLocationEnabled: true,
-      myLocationButtonEnabled: false, // Custom actions keep the viewport centered clean
-      zoomControlsEnabled: false,
-      onMapCreated: (GoogleMapController controller) {
+      myLocationEnabled: _accessStatus == LocationAccessStatus.granted,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: true,
+      mapToolbarEnabled: false,
+      onMapCreated: (controller) {
         _mapController = controller;
       },
     );
