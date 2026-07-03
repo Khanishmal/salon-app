@@ -9,7 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'nearby_salons.dart';
 import 'booking_calendar.dart';
 import 'real_time_chat.dart';
-// AR Feature Hub Modules (Updated paths)
+// AR Feature Hub Modules 
 import 'ar_try_on_suite.dart';
 import 'ar_makeup_screen.dart';
 import 'ai_advisor_screen.dart';
@@ -17,6 +17,8 @@ import 'product_shop.dart';
 import 'loyalty_screen.dart';
 import '../signin_screen.dart';
 import 'inbox_screen.dart';
+import 'orders_screen.dart';
+import 'profile_screen.dart';
 
 class CustomerDashboard extends StatefulWidget {
   const CustomerDashboard({super.key});
@@ -197,7 +199,14 @@ class DashboardHomeView extends StatelessWidget {
               actions: [
                 IconButton(
                   icon: Icon(Icons.notifications_none_rounded, color: textHeadingColor),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const InboxScreen(),
+                      ),
+                    );
+                  },
                 ),
                 Container(
                   margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
@@ -441,10 +450,10 @@ class DashboardHomeView extends StatelessWidget {
                         isDark: isDarkMode,
                       ),
                       _buildQuickActionCircle(
-                        label: "Chat",
-                        icon: Icons.chat_bubble_outline_rounded,
-                        color: const Color(0xFF66BB6A),
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RealTimeChatScreen())),
+                        label: "Orders",
+                        icon: Icons.receipt_long,
+                        color: const Color(0xFF4CAF50),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CustomerOrdersScreen())),
                         isDark: isDarkMode,
                       ),
                       _buildQuickActionCircle(
@@ -455,10 +464,10 @@ class DashboardHomeView extends StatelessWidget {
                         isDark: isDarkMode,
                       ),
                       _buildQuickActionCircle(
-                        label: "Waitlist",
-                        icon: Icons.hourglass_empty_rounded,
-                        color: const Color(0xFFAB47BC),
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const WaitlistScreen())),
+                        label: "Profile",
+                        icon: Icons.person_outline,
+                        color: const Color(0xFF9C27B0),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CustomerProfileScreen())),
                         isDark: isDarkMode,
                       ),
                     ],
@@ -679,10 +688,4 @@ class ServicesMenuScreen extends StatelessWidget {
   const ServicesMenuScreen({super.key});
   @override
   Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Services Menu Screen")));
-}
-
-class WaitlistScreen extends StatelessWidget {
-  const WaitlistScreen({super.key});
-  @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text("Waitlist Screen")));
 }

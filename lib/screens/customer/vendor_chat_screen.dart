@@ -1,4 +1,4 @@
-// lib/screens/vendor/vendor_chat_screen.dart
+// lib/screens/customer/vendor_chat_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,13 +8,11 @@ import 'package:google_fonts/google_fonts.dart';
 class VendorChatScreen extends StatefulWidget {
   final String vendorId;
   final String vendorName;
-  final String customerId;
 
   const VendorChatScreen({
     super.key,
     required this.vendorId,
     required this.vendorName,
-    required this.customerId,
   });
 
   @override
@@ -27,31 +25,6 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
-  String _customerName = 'Customer';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCustomerName();
-  }
-
-  Future<void> _loadCustomerName() async {
-    try {
-      DocumentSnapshot doc = await _firestore
-          .collection('users')
-          .doc(widget.customerId)
-          .get();
-      
-      if (doc.exists) {
-        var data = doc.data() as Map<String, dynamic>;
-        setState(() {
-          _customerName = data['name'] ?? 'Customer';
-        });
-      }
-    } catch (e) {
-      print('Error loading customer name: $e');
-    }
-  }
 
   void _sendMessage() async {
     if (_messageController.text.trim().isEmpty || _isSending) return;
@@ -62,29 +35,17 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
 
     try {
       await _firestore.collection('customer_vendor_chat').add({
-        'customerId': widget.customerId,
+        'customerId': user?.uid,
         'vendorId': widget.vendorId,
         'senderId': user?.uid,
-        'receiverId': widget.customerId,
+        'receiverId': widget.vendorId,
         'message': message,
         'timestamp': FieldValue.serverTimestamp(),
         'read': false,
-        'isCustomer': false,
-        'isVendor': true,
-        'participants': [widget.customerId, widget.vendorId],
+        'isCustomer': true,
+        'isVendor': false,
+        'participants': [user?.uid, widget.vendorId],
       });
-
-      // Mark previous messages as read
-      final unreadSnapshot = await _firestore
-          .collection('customer_vendor_chat')
-          .where('participants', arrayContains: widget.customerId)
-          .where('read', isEqualTo: false)
-          .where('isVendor', isEqualTo: false)
-          .get();
-
-      for (var doc in unreadSnapshot.docs) {
-        await doc.reference.update({'read': true});
-      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error sending message: ${e.toString()}')),
@@ -102,10 +63,10 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
           children: [
             CircleAvatar(
               radius: 16,
-              backgroundColor: Colors.blue.withOpacity(0.1),
+              backgroundColor: const Color(0xFFF2845C).withOpacity(0.1),
               child: Text(
-                _customerName.isNotEmpty ? _customerName[0].toUpperCase() : 'C',
-                style: const TextStyle(color: Colors.blue),
+                widget.vendorName.isNotEmpty ? widget.vendorName[0].toUpperCase() : 'V',
+                style: const TextStyle(color: Color(0xFFF2845C)),
               ),
             ),
             const SizedBox(width: 8),
@@ -113,13 +74,13 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _customerName,
+                  widget.vendorName,
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 StreamBuilder<QuerySnapshot>(
                   stream: _firestore
                       .collection('customer_vendor_chat')
-                      .where('participants', arrayContains: widget.customerId)
+                      .where('participants', arrayContains: widget.vendorId)
                       .where('read', isEqualTo: false)
                       .where('isVendor', isEqualTo: false)
                       .snapshots(),
@@ -147,7 +108,7 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: _firestore
                   .collection('customer_vendor_chat')
-                  .where('participants', arrayContains: widget.customerId)
+                  .where('participants', arrayContains: user?.uid)
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
@@ -192,7 +153,7 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Start chatting with $_customerName',
+                          'Start chatting with ${widget.vendorName}',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: Colors.grey[400],
@@ -245,8 +206,8 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
           if (!isMe) ...[
             CircleAvatar(
               radius: 14,
-              backgroundColor: Colors.blue.withOpacity(0.1),
-              child: const Icon(Icons.person, size: 14, color: Colors.blue),
+              backgroundColor: const Color(0xFFF2845C).withOpacity(0.1),
+              child: const Icon(Icons.store, size: 14, color: Color(0xFFF2845C)),
             ),
             const SizedBox(width: 8),
           ],
@@ -319,8 +280,8 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
             const SizedBox(width: 8),
             CircleAvatar(
               radius: 14,
-              backgroundColor: const Color(0xFFF2845C).withOpacity(0.1),
-              child: const Icon(Icons.store, size: 14, color: Color(0xFFF2845C)),
+              backgroundColor: Colors.grey[200],
+              child: const Icon(Icons.person, size: 14, color: Color(0xFF718096)),
             ),
           ],
         ],
@@ -348,7 +309,7 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
               controller: _messageController,
               enabled: !_isSending,
               decoration: InputDecoration(
-                hintText: 'Reply to customer...',
+                hintText: 'Ask about products...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,

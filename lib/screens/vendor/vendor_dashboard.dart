@@ -1,4 +1,4 @@
-// lib/screens/vendor/vendor_dashboard_screen.dart
+// lib/screens/vendor/vendor_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,7 +10,7 @@ import '../signin_screen.dart';
 import 'profile_screen.dart';
 import 'products_screen.dart';
 import 'orders_screen.dart';
-import 'chat_screen.dart';
+import 'vendor_chat_list_screen.dart';
 import 'announcements_screen.dart';
 import 'vendor_statistics_screen.dart';
 import 'working_hours_screen.dart';
@@ -18,6 +18,7 @@ import 'unavailable_dates_screen.dart';
 import 'promotions_screen.dart';
 import 'settings_screen.dart';
 import 'add_product_screen.dart';
+
 class VendorDashboardScreen extends StatefulWidget {
   const VendorDashboardScreen({super.key});
 
@@ -118,7 +119,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Prevents back button from logging out
+      canPop: false,
       child: Scaffold(
         backgroundColor: _isDarkMode ? const Color(0xFF121212) : const Color(0xFFF8F9FA),
         appBar: AppBar(
@@ -133,65 +134,75 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
           backgroundColor: _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
           elevation: 2,
           centerTitle: true,
-          leading: const SizedBox(), // Removed back button
+          leading: const SizedBox(),
           actions: [
-            // Theme Toggle Button
-            IconButton(
-              icon: Icon(
-                _isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                color: const Color(0xFFF2845C),
+            // Theme Toggle Button with Tooltip
+            Tooltip(
+              message: _isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+              child: IconButton(
+                icon: Icon(
+                  _isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                  color: const Color(0xFFF2845C),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _isDarkMode = !_isDarkMode;
+                  });
+                },
               ),
-              onPressed: () {
-                setState(() {
-                  _isDarkMode = !_isDarkMode;
-                });
-              },
             ),
-            // Chat Button
-            IconButton(
-              icon: const Icon(Icons.chat, color: Color(0xFFF2845C)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => VendorChatScreen(
-                      receiverId: 'admin',
-                      receiverName: 'Admin Support',
-                      vendorId: user?.uid ?? '',
+            // Chat Button with Tooltip
+            Tooltip(
+              message: 'Chats',
+              child: IconButton(
+                icon: const Icon(Icons.chat, color: Color(0xFFF2845C)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const VendorChatListScreen(),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-            // Announcements Button
-            IconButton(
-              icon: const Icon(Icons.notifications_outlined, color: Color(0xFFF2845C)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const VendorAnnouncementsScreen(),
-                  ),
-                );
-              },
+            // Announcements Button with Tooltip
+            Tooltip(
+              message: 'Announcements',
+              child: IconButton(
+                icon: const Icon(Icons.notifications_outlined, color: Color(0xFFF2845C)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const VendorAnnouncementsScreen(),
+                    ),
+                  );
+                },
+              ),
             ),
-            // Profile Button
-            IconButton(
-              icon: const Icon(Icons.person_outline, color: Color(0xFFF2845C)),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const VendorProfileScreen(),
-                  ),
-                );
-              },
+            // Profile Button with Tooltip
+            Tooltip(
+              message: 'Profile',
+              child: IconButton(
+                icon: const Icon(Icons.person_outline, color: Color(0xFFF2845C)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const VendorProfileScreen(),
+                    ),
+                  );
+                },
+              ),
             ),
-            // Logout Button
-            IconButton(
-              icon: const Icon(Icons.logout, color: Colors.red),
-              onPressed: _logout,
-              tooltip: 'Logout',
+            // Logout Button with Tooltip
+            Tooltip(
+              message: 'Logout',
+              child: IconButton(
+                icon: const Icon(Icons.logout, color: Colors.red),
+                onPressed: _logout,
+              ),
             ),
           ],
         ),
@@ -434,6 +445,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
       {'icon': Icons.access_time, 'label': 'Working Hours', 'color': Colors.orange},
       {'icon': Icons.event_busy, 'label': 'Unavailable', 'color': Colors.red},
       {'icon': Icons.settings, 'label': 'Settings', 'color': Colors.grey},
+      {'icon': Icons.chat, 'label': 'Chats', 'color': Colors.teal},
     ];
 
     return GridView.builder(
@@ -480,12 +492,12 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 );
                 break;
               case 'Promotions':
-                 Navigator.push(
-                   context,
-                   MaterialPageRoute(
-                     builder: (context) => const VendorPromotionsScreen(),
-                   ),
-                 );
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VendorPromotionsScreen(),
+                  ),
+                );
                 break;
               case 'Working Hours':
                 Navigator.push(
@@ -508,6 +520,14 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => const VendorSettingsScreen(),
+                  ),
+                );
+                break;
+              case 'Chats':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VendorChatListScreen(),
                   ),
                 );
                 break;
@@ -547,7 +567,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 24),
             ),
@@ -575,7 +595,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Recent Orders',
+              'Customer Orders',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -601,7 +621,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               .collection('orders')
               .where('vendorId', isEqualTo: user?.uid)
               .orderBy('createdAt', descending: true)
-              .limit(3)
+              .limit(5)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -629,7 +649,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Center(
-                  child: Text('No orders yet'),
+                  child: Text('No customer orders yet'),
                 ),
               );
             }
@@ -640,8 +660,8 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 return _buildOrderItem(
                   id: doc.id,
                   customer: data['customerName'] ?? 'Customer',
-                  amount: data['amount'] ?? 0,
-                  status: data['status'] ?? 'pending',
+                  amount: data['total'] ?? data['amount'] ?? 0,
+                  status: data['orderStatus'] ?? data['status'] ?? 'pending',
                   date: data['createdAt'] as Timestamp?,
                 );
               }).toList(),
@@ -663,12 +683,16 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
     String statusLabel;
     
     switch (status) {
-      case 'completed':
+      case 'delivered':
         statusColor = Colors.green;
-        statusLabel = 'Completed';
+        statusLabel = 'Delivered';
+        break;
+      case 'shipped':
+        statusColor = Colors.blue;
+        statusLabel = 'Shipped';
         break;
       case 'processing':
-        statusColor = Colors.blue;
+        statusColor = Colors.orange;
         statusLabel = 'Processing';
         break;
       case 'cancelled':
@@ -676,7 +700,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
         statusLabel = 'Cancelled';
         break;
       default:
-        statusColor = Colors.orange;
+        statusColor = Colors.grey;
         statusLabel = 'Pending';
     }
 
@@ -697,7 +721,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              status == 'completed' ? Icons.check_circle : Icons.pending,
+              status == 'delivered' ? Icons.check_circle : Icons.pending,
               color: statusColor,
               size: 20,
             ),
