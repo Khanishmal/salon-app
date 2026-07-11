@@ -11,6 +11,7 @@ import 'profile_screen.dart';
 import 'products_screen.dart';
 import 'orders_screen.dart';
 import 'vendor_chat_list_screen.dart';
+import 'chat_screen.dart';
 import 'announcements_screen.dart';
 import 'vendor_statistics_screen.dart';
 import 'working_hours_screen.dart';
@@ -136,7 +137,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
           centerTitle: true,
           leading: const SizedBox(),
           actions: [
-            // Theme Toggle Button with Tooltip
+            // Theme Toggle
             Tooltip(
               message: _isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
               child: IconButton(
@@ -151,9 +152,10 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 },
               ),
             ),
-            // Chat Button with Tooltip
+           
+            // Product Chats Button
             Tooltip(
-              message: 'Chats',
+              message: 'Product Chats',
               child: IconButton(
                 icon: const Icon(Icons.chat, color: Color(0xFFF2845C)),
                 onPressed: () {
@@ -166,7 +168,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 },
               ),
             ),
-            // Announcements Button with Tooltip
+            // Announcements Button
             Tooltip(
               message: 'Announcements',
               child: IconButton(
@@ -181,7 +183,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 },
               ),
             ),
-            // Profile Button with Tooltip
+            // Profile Button
             Tooltip(
               message: 'Profile',
               child: IconButton(
@@ -196,7 +198,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 },
               ),
             ),
-            // Logout Button with Tooltip
+            // Logout Button
             Tooltip(
               message: 'Logout',
               child: IconButton(

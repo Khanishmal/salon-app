@@ -1,13 +1,4 @@
-
-// PROFESSIONAL AR JEWELRY SCREEN - PRODUCTION READY
-//============================================================================
-//Features:
-//- Real-time jewelry try-on
-//- Proper facial landmark positioning
-// - 4 jewelry types: Tikka, Nath, Necklace, Earrings
-//- Multiple metal colors
-// - Screenshot capability
-// ============================================================================
+//lib/customer/ar_jewelry_screen.dart
 
 import 'dart:io';
 import 'dart:math' as math;

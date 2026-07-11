@@ -65,9 +65,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _brandController.text = widget.productData!['brand'] ?? '';
       _imageUrl = widget.productData!['imageUrl'];
     }
-    
-    // Pre-check permissions
-    _checkPermissions();
   }
 
   @override
@@ -81,27 +78,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.dispose();
   }
 
-  Future<void> _checkPermissions() async {
-    // Just check if permissions are already granted
-    bool hasPermission = await _hasGalleryPermission();
-    if (!hasPermission) {
-      // Request permission when user taps, not here
-    }
-  }
-
   Future<bool> _hasGalleryPermission() async {
     if (Platform.isAndroid) {
-      // For Android 13+ (API 33+), use photos permission
       if (await Permission.photos.isGranted) {
         return true;
       }
-      // For older Android, use storage permission
       if (await Permission.storage.isGranted) {
         return true;
       }
       return false;
     } else {
-      // iOS
       if (await Permission.photos.isGranted) {
         return true;
       }
@@ -111,21 +97,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _requestPermission() async {
     if (Platform.isAndroid) {
-      // For Android 13+ (API 33+)
       if (await Permission.photos.request().isGranted) {
         return;
       }
-      // For older Android
       if (await Permission.storage.request().isGranted) {
         return;
       }
-      // If both denied, show dialog
       if (await Permission.photos.isPermanentlyDenied || 
           await Permission.storage.isPermanentlyDenied) {
         _showPermissionDeniedDialog();
       }
     } else {
-      // iOS
       if (await Permission.photos.request().isGranted) {
         return;
       }
@@ -162,12 +144,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _isImagePicking = true);
 
     try {
-      // Check if permission is granted
       bool hasPermission = await _hasGalleryPermission();
       
       if (!hasPermission) {
         await _requestPermission();
-        // Recheck after request
         hasPermission = await _hasGalleryPermission();
         if (!hasPermission) {
           setState(() => _isImagePicking = false);
@@ -175,7 +155,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
         }
       }
 
-      // Pick image from gallery
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 800,
@@ -209,56 +188,83 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  Future<String?> _uploadImage() async {
-    if (_imageFile == null) return _imageUrl;
+  // lib/screens/vendor/add_product_screen.dart - Updated _uploadImage method
+
+Future<String?> _uploadImage() async {
+  if (_imageFile == null) return _imageUrl;
+  
+  setState(() {
+    _isUploading = true;
+  });
+
+  try {
+    // Create a unique filename with proper path
+    String fileName = 'products/${widget.vendorId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    Reference ref = _storage.ref().child(fileName);
+    
+    // Upload with proper metadata
+    UploadTask uploadTask = ref.putFile(
+      _imageFile!,
+      SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {
+          'vendorId': widget.vendorId,
+          'uploadedAt': DateTime.now().toIso8601String(),
+        },
+      ),
+    );
+    
+    // Wait for upload to complete with error handling
+    TaskSnapshot snapshot = await uploadTask.whenComplete(() => {});
+    
+    // Get download URL
+    String downloadUrl = await snapshot.ref.getDownloadURL();
     
     setState(() {
-      _isUploading = true;
+      _imageUrl = downloadUrl;
+      _isUploading = false;
     });
-
-    try {
-      // Create a unique filename
-      String fileName = 'products/${widget.vendorId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-      Reference ref = _storage.ref().child(fileName);
-      
-      // Upload the file
-      UploadTask uploadTask = ref.putFile(
-        _imageFile!,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'vendorId': widget.vendorId,
-            'uploadedAt': DateTime.now().toIso8601String(),
-          },
-        ),
-      );
-      
-      // Wait for upload to complete
-      TaskSnapshot snapshot = await uploadTask.whenComplete(() => {});
-      
-      // Get download URL
-      String downloadUrl = await snapshot.ref.getDownloadURL();
-      
-      setState(() {
-        _imageUrl = downloadUrl;
-        _isUploading = false;
-      });
-      
-      return downloadUrl;
-    } catch (e) {
-      print('Upload error: $e');
-      setState(() {
-        _isUploading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error uploading image: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return null;
+    
+    return downloadUrl;
+  } on FirebaseException catch (e) {
+    print('Firebase Storage Error: ${e.code} - ${e.message}');
+    setState(() {
+      _isUploading = false;
+    });
+    
+    String errorMessage = 'Error uploading image: ';
+    if (e.code == 'storage/object-not-found') {
+      errorMessage += 'Storage path not found. Please check Firebase Storage rules.';
+    } else if (e.code == 'storage/unauthorized') {
+      errorMessage += 'You are not authorized to upload. Please check security rules.';
+    } else if (e.code == 'storage/canceled') {
+      errorMessage += 'Upload was canceled.';
+    } else {
+      errorMessage += e.message ?? 'Unknown error occurred.';
     }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(errorMessage),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+    return null;
+  } catch (e) {
+    print('Upload error: $e');
+    setState(() {
+      _isUploading = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error uploading image: ${e.toString()}'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return null;
   }
+}
 
   Future<void> _saveProduct() async {
     if (_formKey.currentState!.validate()) {
@@ -269,7 +275,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
       try {
         String? imageUrl = _imageUrl;
         
-        // Upload image if a new image is selected
         if (_imageFile != null) {
           imageUrl = await _uploadImage();
           if (imageUrl == null) {

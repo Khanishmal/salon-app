@@ -1,4 +1,4 @@
-// lib/screens/ar/ar_mehndi_screen.dart
+// lib/screens/customer/ar_mehndi_screen.dart
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:io';

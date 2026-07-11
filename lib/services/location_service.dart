@@ -1,3 +1,4 @@
+// lib/services/location_service.dart
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -23,34 +24,41 @@ class LocationAccessResult {
 
 class LocationService {
   static Future<LocationAccessResult> ensureAccess() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return const LocationAccessResult(
-        status: LocationAccessStatus.serviceDisabled,
-        message: 'Location services are disabled. Please turn them on.',
-      );
-    }
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return const LocationAccessResult(
+          status: LocationAccessStatus.serviceDisabled,
+          message: 'Location services are disabled. Please turn them on.',
+        );
+      }
 
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
 
-    if (permission == LocationPermission.denied) {
-      return const LocationAccessResult(
+      if (permission == LocationPermission.denied) {
+        return const LocationAccessResult(
+          status: LocationAccessStatus.permissionDenied,
+          message: 'Location permission denied. Allow access to find nearby salons.',
+        );
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return const LocationAccessResult(
+          status: LocationAccessStatus.permissionDeniedForever,
+          message: 'Location permission is blocked. Enable it in app settings.',
+        );
+      }
+
+      return const LocationAccessResult(status: LocationAccessStatus.granted);
+    } catch (e) {
+      return LocationAccessResult(
         status: LocationAccessStatus.permissionDenied,
-        message: 'Location permission denied. Allow access to find nearby salons.',
+        message: 'Error accessing location: ${e.toString()}',
       );
     }
-
-    if (permission == LocationPermission.deniedForever) {
-      return const LocationAccessResult(
-        status: LocationAccessStatus.permissionDeniedForever,
-        message: 'Location permission is blocked. Enable it in app settings.',
-      );
-    }
-
-    return const LocationAccessResult(status: LocationAccessStatus.granted);
   }
 
   static Future<LatLng?> getCurrentPosition() async {
@@ -60,10 +68,14 @@ class LocationService {
         timeLimit: const Duration(seconds: 12),
       );
       return LatLng(position.latitude, position.longitude);
-    } catch (_) {
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown == null) return null;
-      return LatLng(lastKnown.latitude, lastKnown.longitude);
+    } catch (e) {
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) {
+          return LatLng(lastKnown.latitude, lastKnown.longitude);
+        }
+      } catch (_) {}
+      return null;
     }
   }
 

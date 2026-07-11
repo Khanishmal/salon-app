@@ -20,7 +20,7 @@ import 'inbox_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'services_menu_screen.dart';
-
+import 'virtual_makeup_screen.dart';
 class CustomerDashboard extends StatefulWidget {
   const CustomerDashboard({super.key});
 
@@ -310,7 +310,7 @@ class DashboardHomeView extends StatelessWidget {
                               icon: Icons.videocam_rounded,
                               color: const Color(0xFF351A2A),
                               iconColor: const Color(0xFFFF4C93),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArMakeupScreen())),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
                             ),
                             _buildInnerHeroTile(
                               label: "Explore",
@@ -387,7 +387,7 @@ class DashboardHomeView extends StatelessWidget {
                           title: "Face & Chromatic Makeup Matrix",
                           subtitle: "Lipstick, Eye Shadow & Foundation parameters",
                           icon: Icons.face,
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ArMakeupScreen())),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const VirtualMakeupScreen())),
                           isDark: isDarkMode,
                         ),
                         _buildPipelineHorizontalCard(

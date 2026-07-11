@@ -1,10 +1,5 @@
-// lib/screens/ar/ar_makeup_screen.dart
-// CORRECTED VERSION - Proper face makeup without mehndi/jewelry interference
-// Issues fixed:
-// 1. Lipstick mask to avoid teeth area
-// 2. Better blend modes for natural look
-// 3. Proper eye detection preventing mehndi patterns
-// 4. Separated from jewelry and mehndi logic
+// lib/screens/customer/ar_makeup_screen.dart
+
 
 import 'dart:io';
 import 'dart:math' as math;

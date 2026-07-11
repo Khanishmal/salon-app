@@ -24,17 +24,7 @@ class _HelpScreenState extends State<HelpScreen> {
   bool _isLoadingHistory = true;
   bool _geminiInitialized = false;
   bool _isDeleting = false;
-
-  final String _appContext = """
-You are GlowSalon AI Assistant. GlowSalon is a beauty and salon management app.
-
-Features:
-1. Customers: Book appointments (Hair, Makeup, Spa, Nails, Facials), Shop products, AR Makeup Try-On, Orders, Chat with vendors, Loyalty points
-2. Vendors: Manage products, View orders, Chat with customers, Promotions, Sales analytics
-3. Admin: Manage users, Approve vendors, Manage services, Announcements, Dashboard
-
-Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Email verification required.
-""";
+  bool _useGemini = false; // Toggle for using Gemini or fallback
 
   @override
   void initState() {
@@ -52,14 +42,23 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
         apiKey: apiKey,
       );
       
-      setState(() {
-        _geminiInitialized = true;
-      });
-      print('✅ Gemini initialized successfully');
+      // Test the model
+      final testResponse = await _model!.generateContent(
+        [Content.text('Hello')]
+      );
+      
+      if (testResponse.text != null) {
+        setState(() {
+          _geminiInitialized = true;
+          _useGemini = true;
+        });
+        print('✅ Gemini initialized successfully');
+      }
     } catch (e) {
       print('❌ Error initializing Gemini: $e');
       setState(() {
         _geminiInitialized = false;
+        _useGemini = false;
       });
     }
   }
@@ -229,7 +228,7 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
 
   void _addWelcomeMessage() {
     if (_messages.isEmpty) {
-      final welcomeMsg = '👋 Hello! I\'m your GlowSalon AI Assistant.\n\nI can help you with:\n• Booking appointments\n• Shopping for products\n• Understanding app features\n• Getting started as a vendor\n• And much more!\n\nWhat would you like to know?';
+      final welcomeMsg = '👋 Hello! I\'m your GlowSalon AI Assistant.\n\nI can help you with:\n• Booking appointments\n• Shopping for products\n• Understanding app features\n• Getting started as a vendor\n• General knowledge questions\n• And much more!\n\nWhat would you like to know?';
       _messages.add({
         'isUser': false,
         'message': welcomeMsg,
@@ -257,7 +256,7 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
     _queryController.clear();
     setState(() => _isLoading = true);
     
-    // Save user message to history and get docId
+    // Save user message to history
     String? userDocId;
     if (user != null) {
       try {
@@ -270,7 +269,6 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
           'createdAt': FieldValue.serverTimestamp(),
         });
         userDocId = docRef.id;
-        // Update the message with docId
         setState(() {
           _messages[_messages.length - 1]['docId'] = userDocId;
         });
@@ -284,18 +282,34 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
     try {
       String answer;
       
-      if (_geminiInitialized && _model != null) {
+      // Try Gemini first if available
+      if (_useGemini && _model != null) {
         try {
-          final prompt = '$_appContext\n\nUser Question: $query\n\nPlease provide a helpful and accurate response.';
+          final prompt = '''
+You are GlowSalon AI Assistant. You are a helpful, friendly, and knowledgeable assistant.
+Answer the following question accurately and concisely.
+
+Context about GlowSalon app:
+- Beauty and salon management app
+- Features: Book appointments, Shop products, AR Makeup Try-On, Orders, Chat with vendors
+- Users: Customers, Vendors, Admin
+- Vendors need admin approval
+
+Question: $query
+
+Please provide a helpful and accurate response. If the question is not related to the app, answer it generally.
+''';
+          
           final response = await _model!.generateContent(
             [Content.text(prompt)]
           );
-          answer = response.text ?? 'I apologize, but I couldn\'t generate a response. Please try again.';
+          answer = response.text ?? _getFallbackResponse(query);
         } catch (e) {
           print('Gemini error: $e');
           answer = _getFallbackResponse(query);
         }
       } else {
+        // Use fallback responses
         answer = _getFallbackResponse(query);
       }
       
@@ -364,8 +378,22 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
   String _getFallbackResponse(String query) {
     final lowerQuery = query.toLowerCase();
     
-    // Check for various keywords
-    if (lowerQuery.contains('book') || lowerQuery.contains('appointment')) {
+    // General knowledge questions
+    if (lowerQuery.contains('capital') && lowerQuery.contains('pakistan')) {
+      return 'The capital of Pakistan is Islamabad. It is located in the Islamabad Capital Territory and is the country\'s ninth-largest city.';
+    } else if (lowerQuery.contains('capital') && lowerQuery.contains('india')) {
+      return 'The capital of India is New Delhi. It is located in the National Capital Territory of Delhi.';
+    } else if (lowerQuery.contains('capital') && lowerQuery.contains('china')) {
+      return 'The capital of China is Beijing. It is one of the most populous cities in the world.';
+    } else if (lowerQuery.contains('population') && lowerQuery.contains('pakistan')) {
+      return 'Pakistan has a population of approximately 240 million people (as of 2023). It is the 5th most populous country in the world.';
+    } else if (lowerQuery.contains('currency') && lowerQuery.contains('pakistan')) {
+      return 'The official currency of Pakistan is the Pakistani Rupee (PKR).';
+    } else if (lowerQuery.contains('language') && lowerQuery.contains('pakistan')) {
+      return 'Urdu is the national language of Pakistan, and English is widely used as an official language. There are also several regional languages including Punjabi, Sindhi, Pashto, and Balochi.';
+    
+    // App related questions
+    } else if (lowerQuery.contains('book') || lowerQuery.contains('appointment')) {
       return 'To book an appointment:\n1. Go to the "Book Now" section\n2. Select a service (Hair, Makeup, Spa, Nails, Facials)\n3. Choose a date and time\n4. Confirm your booking\n\nYou can also book through the "Services" menu.';
     } else if (lowerQuery.contains('shop') || lowerQuery.contains('product') || lowerQuery.contains('buy')) {
       return 'To shop for products:\n1. Go to the "Shop" section\n2. Browse products from various vendors\n3. Click on a product to view details\n4. Add to cart and checkout\n\nYou can also chat with vendors for more information.';
@@ -377,10 +405,14 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
       return 'To reset your password:\n1. Go to the Sign In screen\n2. Tap "Forgot password?"\n3. Enter your email address\n4. Check your inbox for the reset link\n5. Follow the link to set a new password';
     } else if (lowerQuery.contains('dummy') || lowerQuery.contains('test') || lowerQuery.contains('email')) {
       return 'Yes, you can use dummy email for testing purposes. However, for real usage, we recommend using a valid email address to receive important notifications and updates.';
+    } else if (lowerQuery.contains('purpose') || lowerQuery.contains('app')) {
+      return 'GlowSalon is a beauty and salon management app that helps customers book appointments, shop for products, and discover beauty services. It also allows vendors to manage their products and orders, and admins to manage the entire platform.';
     } else if (lowerQuery.contains('hi') || lowerQuery.contains('hello') || lowerQuery.contains('hey')) {
-      return 'Hello! 👋 How can I help you today? I can assist with booking appointments, shopping, becoming a vendor, payments, and more!';
+      return 'Hello! 👋 How can I help you today? I can assist with booking appointments, shopping, becoming a vendor, payments, general knowledge questions, and more!';
+    
+    // General fallback
     } else {
-      return 'I\'m here to help! You can ask me about:\n• Booking appointments\n• Shopping for products\n• Becoming a vendor\n• Payments\n• Password reset\n• Using dummy email\n• And more!\n\nWhat would you like to know?';
+      return 'I\'m here to help! You can ask me about:\n• Booking appointments\n• Shopping for products\n• Becoming a vendor\n• Payments\n• Password reset\n• General knowledge (like capitals, population, etc.)\n• And more!\n\nWhat would you like to know?';
     }
   }
 
@@ -427,16 +459,32 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
             },
             tooltip: 'Refresh Chat',
           ),
+          // Toggle between AI and Fallback
           Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _geminiInitialized ? Colors.green : Colors.orange,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              _geminiInitialized ? 'AI Online' : 'AI Offline',
-              style: const TextStyle(color: Colors.white, fontSize: 10),
+            margin: const EdgeInsets.only(right: 4),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _useGemini = !_useGemini;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_useGemini ? 'AI Mode: Gemini' : 'AI Mode: Fallback'),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _useGemini ? Colors.green : Colors.orange,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _useGemini ? 'AI' : 'Offline',
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
             ),
           ),
         ],
@@ -477,8 +525,8 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
                           _sendQuery();
                         }),
                         const SizedBox(width: 8),
-                        _buildQuickActionChip('📧 Dummy Email', () {
-                          _queryController.text = 'Can I use dummy email for app?';
+                        _buildQuickActionChip('📧 General Query', () {
+                          _queryController.text = 'Tell me something interesting';
                           _sendQuery();
                         }),
                       ],
@@ -662,14 +710,21 @@ Getting Started: Sign up as Customer or Vendor. Vendors need admin approval. Ema
                           color: isUser ? Colors.white.withOpacity(0.7) : Colors.grey[500],
                         ),
                       ),
-                      if (showDelete && !isUser) ...[
+                      if (showDelete) ...[
                         const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () => _deleteSingleMessage(docId, index),
-                          child: Icon(
-                            Icons.close,
-                            size: 14,
-                            color: Colors.grey[400],
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.grey[600],
+                            ),
                           ),
                         ),
                       ],

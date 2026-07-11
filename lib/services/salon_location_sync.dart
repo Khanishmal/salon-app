@@ -1,3 +1,4 @@
+//lib/services/salon_location_sync.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'location_service.dart';

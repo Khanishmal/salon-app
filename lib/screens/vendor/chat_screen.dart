@@ -67,7 +67,6 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
 
     try {
       if (widget.isAdminChat || widget.customerId == 'admin') {
-        // Send to admin using chat_messages collection
         await _firestore.collection('chat_messages').add({
           'senderId': user?.uid,
           'receiverId': 'admin',
@@ -79,7 +78,6 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
           'participants': [user?.uid, 'admin'],
         });
       } else {
-        // Send to customer using customer_vendor_chat collection
         await _firestore.collection('customer_vendor_chat').add({
           'customerId': widget.customerId,
           'vendorId': widget.vendorId,
@@ -92,18 +90,6 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
           'isVendor': true,
           'participants': [widget.customerId, widget.vendorId],
         });
-
-        // Mark previous messages as read
-        final unreadSnapshot = await _firestore
-            .collection('customer_vendor_chat')
-            .where('participants', arrayContains: user?.uid)
-            .where('read', isEqualTo: false)
-            .where('isVendor', isEqualTo: false)
-            .get();
-
-        for (var doc in unreadSnapshot.docs) {
-          await doc.reference.update({'read': true});
-        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,30 +127,12 @@ class _VendorChatScreenState extends State<VendorChatScreen> {
                   _participantName,
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                StreamBuilder<QuerySnapshot>(
-                  stream: widget.isAdminChat
-                      ? _firestore
-                          .collection('chat_messages')
-                          .where('participants', arrayContains: user?.uid)
-                          .where('read', isEqualTo: false)
-                          .where('isAdminMessage', isEqualTo: true)
-                          .snapshots()
-                      : _firestore
-                          .collection('customer_vendor_chat')
-                          .where('participants', arrayContains: user?.uid)
-                          .where('read', isEqualTo: false)
-                          .where('isVendor', isEqualTo: false)
-                          .snapshots(),
-                  builder: (context, snapshot) {
-                    int unread = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                    return Text(
-                      unread > 0 ? '$unread unread' : 'Online',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: unread > 0 ? Colors.red : Colors.green,
-                      ),
-                    );
-                  },
+                Text(
+                  widget.isAdminChat ? 'Admin' : 'Customer',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: widget.isAdminChat ? Colors.blue : const Color(0xFFF2845C),
+                  ),
                 ),
               ],
             ),

@@ -6,7 +6,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/location_service.dart';
-import 'booking_calendar.dart';
 
 class NearbySalonsScreen extends StatefulWidget {
   const NearbySalonsScreen({super.key});
@@ -16,12 +15,12 @@ class NearbySalonsScreen extends StatefulWidget {
 }
 
 class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
-  static const _defaultCenter = LatLng(24.8607, 67.0011); // Karachi fallback
+  static const _defaultCenter = LatLng(24.8607, 67.0011);
 
   bool _isMapView = false;
   bool _isLoading = true;
   bool _isGeocodingSearch = false;
-  String _statusMessage = 'Finding your location...';
+  String _statusMessage = 'Finding salons near you...';
   LocationAccessStatus? _accessStatus;
 
   final TextEditingController _searchController = TextEditingController();
@@ -37,6 +36,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
   final Set<Marker> _markers = {};
 
   StreamSubscription<QuerySnapshot>? _salonStreamSubscription;
+  bool _isMapInitialized = false;
 
   @override
   void initState() {
@@ -55,29 +55,41 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
   Future<void> _initializeLocationAndSalons() async {
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Checking location access...';
+      _statusMessage = 'Getting your location...';
     });
 
-    final access = await LocationService.ensureAccess();
-    _accessStatus = access.status;
+    try {
+      final access = await LocationService.ensureAccess();
+      _accessStatus = access.status;
 
-    if (access.isGranted) {
-      setState(() => _statusMessage = 'Getting your location...');
-      _currentPosition = await LocationService.getCurrentPosition();
-    }
-
-    if (!mounted) return;
-
-    if (_currentPosition == null) {
-      _currentPosition = _defaultCenter;
-      if (!access.isGranted) {
-        _statusMessage = access.message ?? 'Using default map area.';
-      } else {
-        _statusMessage = 'Could not get GPS fix. Showing default map area.';
+      if (access.isGranted) {
+        setState(() => _statusMessage = 'Finding your location...');
+        final position = await LocationService.getCurrentPosition();
+        if (position != null) {
+          setState(() {
+            _currentPosition = position;
+          });
+        }
       }
-    }
 
-    _startSalonStream();
+      if (!mounted) return;
+
+      if (_currentPosition == null) {
+        _currentPosition = _defaultCenter;
+        if (!access.isGranted) {
+          _statusMessage = access.message ?? 'Showing default location.';
+        } else {
+          _statusMessage = 'Could not get GPS fix. Showing default location.';
+        }
+      }
+
+      _startSalonStream();
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _statusMessage = 'Error: ${e.toString()}';
+      });
+    }
   }
 
   void _startSalonStream() {
@@ -85,8 +97,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
 
     _salonStreamSubscription?.cancel();
     _salonStreamSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'Vendor')
+        .collection('salons')
         .snapshots()
         .listen((snapshot) async {
       _allSalons = snapshot.docs;
@@ -145,7 +156,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
     if (_searchQuery.isNotEmpty) {
       workingList = workingList.where((doc) {
         final data = _salonData(doc);
-        final name = (data['businessName'] ?? data['name'] ?? '').toString().toLowerCase();
+        final name = (data['name'] ?? '').toString().toLowerCase();
         final address = (data['address'] ?? '').toString().toLowerCase();
         return name.contains(_searchQuery) || address.contains(_searchQuery);
       }).toList();
@@ -156,14 +167,6 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       final dataB = _salonData(b);
       final distA = _distanceKm(dataA, doc: a) ?? double.maxFinite;
       final distB = _distanceKm(dataB, doc: b) ?? double.maxFinite;
-
-      final ratingA = _toDouble(dataA['rating']) ?? 0.0;
-      final ratingB = _toDouble(dataB['rating']) ?? 0.0;
-      final isRecA = distA <= 5.0 && ratingA >= 4.5;
-      final isRecB = distB <= 5.0 && ratingB >= 4.5;
-
-      if (isRecA && !isRecB) return -1;
-      if (!isRecA && isRecB) return 1;
       return distA.compareTo(distB);
     });
 
@@ -184,7 +187,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
   void _rebuildMapPins() {
     _markers.clear();
 
-    if (_accessStatus != LocationAccessStatus.granted && _currentPosition != null) {
+    if (_currentPosition != null) {
       _markers.add(
         Marker(
           markerId: const MarkerId('current_user_position'),
@@ -200,24 +203,20 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       final coords = _salonCoordinates(doc);
       if (coords == null) continue;
 
-      final rating = _toDouble(data['rating']) ?? 0.0;
       final distance = _distanceKm(data, doc: doc);
-      final isRecommended = distance != null && distance <= 5.0 && rating >= 4.5;
-      final name = data['businessName'] ?? data['name'] ?? 'Salon';
+      final name = data['name'] ?? 'Salon';
 
       _markers.add(
         Marker(
           markerId: MarkerId(doc.id),
           position: coords,
           infoWindow: InfoWindow(
-            title: isRecommended ? '$name (Top Pick)' : name,
+            title: name,
             snippet: distance != null
-                ? '${distance.toStringAsFixed(1)} km away | ${rating.toStringAsFixed(1)} stars'
+                ? '${distance.toStringAsFixed(1)} km away'
                 : (data['address'] ?? '').toString(),
           ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            isRecommended ? BitmapDescriptor.hueRose : BitmapDescriptor.hueOrange,
-          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
           onTap: () => _openDirections(coords),
         ),
       );
@@ -247,38 +246,54 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       _isMapView = true;
     });
 
-    await _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(coords, 13.5),
-    );
+    if (_mapController != null) {
+      await _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(coords, 13.5),
+      );
+    }
   }
 
   Future<void> _openDirections(LatLng destination) async {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}',
     );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open directions')),
+      );
     }
   }
 
   Future<void> _recenterOnUser() async {
-    final access = await LocationService.ensureAccess();
-    if (!access.isGranted) {
-      _showLocationHelp(access);
-      return;
+    try {
+      final access = await LocationService.ensureAccess();
+      if (!access.isGranted) {
+        _showLocationHelp(access);
+        return;
+      }
+
+      final position = await LocationService.getCurrentPosition();
+      if (position == null || !mounted) return;
+
+      setState(() {
+        _currentPosition = position;
+        _searchCenter = null;
+      });
+      _applyFilteringAndSorting();
+      if (_mapController != null) {
+        await _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(position, 13.5),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error getting location: ${e.toString()}')),
+      );
     }
-
-    final position = await LocationService.getCurrentPosition();
-    if (position == null || !mounted) return;
-
-    setState(() {
-      _currentPosition = position;
-      _searchCenter = null;
-    });
-    _applyFilteringAndSorting();
-    await _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(position, 13.5),
-    );
   }
 
   void _showLocationHelp(LocationAccessResult access) {
@@ -286,7 +301,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Location needed'),
-        content: Text(access.message ?? 'Please enable location to use this feature.'),
+        content: Text(access.message ?? 'Please enable location to find nearby salons.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           if (access.status == LocationAccessStatus.serviceDisabled)
@@ -310,12 +325,6 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
     );
   }
 
-  double? _toDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString());
-  }
-
   @override
   void dispose() {
     _salonStreamSubscription?.cancel();
@@ -332,7 +341,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         title: Text(
-          'Discover Salons',
+          'Nearby Salons',
           style: GoogleFonts.poppins(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -437,7 +446,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => _searchByAddress(),
         decoration: InputDecoration(
-          hintText: 'Search salons or enter an area...',
+          hintText: 'Search salons or area...',
           prefixIcon: const Icon(Icons.search, color: Color(0xFFF2845C)),
           suffixIcon: _isGeocodingSearch
               ? const Padding(
@@ -471,9 +480,27 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
   Widget _buildListView() {
     if (_filteredSalons.isEmpty) {
       return Center(
-        child: Text(
-          'No salons found nearby.',
-          style: GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.storefront_outlined, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'No salons found nearby',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try searching for a different area',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[400],
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -486,9 +513,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
         final data = _salonData(doc);
         final coords = _salonCoordinates(doc);
         final distance = _distanceKm(data, doc: doc);
-        final rating = _toDouble(data['rating']) ?? 4.5;
-        final isRecommended = distance != null && distance <= 5.0 && rating >= 4.5;
-        final name = data['businessName'] ?? data['name'] ?? 'Salon Hub';
+        final name = data['name'] ?? 'Salon Hub';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -502,9 +527,6 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
                 offset: const Offset(0, 6),
               ),
             ],
-            border: isRecommended
-                ? Border.all(color: const Color(0xFFF2845C).withOpacity(0.4), width: 1.5)
-                : null,
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -557,7 +579,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
                           const Icon(Icons.star, color: Color(0xFFF2845C), size: 15),
                           const SizedBox(width: 4),
                           Text(
-                            rating.toStringAsFixed(1),
+                            (data['rating'] ?? 4.5).toStringAsFixed(1),
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -580,7 +602,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
                         Text(
                           distance != null
                               ? '${distance.toStringAsFixed(1)} km away'
-                              : (coords != null ? 'Distance unavailable' : 'Location pending'),
+                              : 'Location unavailable',
                           style: GoogleFonts.poppins(
                             fontSize: 13,
                             color: Colors.grey[700],
@@ -598,10 +620,10 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
                           ),
                         ElevatedButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const BookingCalendarScreen(),
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Booking coming soon! We are partnering with this salon.'),
+                                backgroundColor: Color(0xFFF2845C),
                               ),
                             );
                           },
@@ -615,7 +637,7 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
                             ),
                           ),
                           child: Text(
-                            'Book',
+                            'View',
                             style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -633,7 +655,10 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
 
   Widget _buildMapView() {
     return GoogleMap(
-      initialCameraPosition: CameraPosition(target: _mapCenter, zoom: 13.5),
+      initialCameraPosition: CameraPosition(
+        target: _mapCenter,
+        zoom: 13.5,
+      ),
       markers: _markers,
       myLocationEnabled: _accessStatus == LocationAccessStatus.granted,
       myLocationButtonEnabled: false,
@@ -641,6 +666,12 @@ class _NearbySalonsScreenState extends State<NearbySalonsScreen> {
       mapToolbarEnabled: false,
       onMapCreated: (controller) {
         _mapController = controller;
+        _isMapInitialized = true;
+        if (_currentPosition != null) {
+          controller.animateCamera(
+            CameraUpdate.newLatLngZoom(_currentPosition!, 13.5),
+          );
+        }
       },
     );
   }
