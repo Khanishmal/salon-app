@@ -35,7 +35,7 @@ class _HelpScreenState extends State<HelpScreen> {
 
   Future<void> _initializeGemini() async {
     try {
-      const apiKey = 'YOUR_GEMINI_API_KEY'; // Replace with your actual API key
+      const apiKey = 'GEMINI_API_KEY'; // Replace with your actual API key
       
       _model = GenerativeModel(
         model: 'gemini-pro',

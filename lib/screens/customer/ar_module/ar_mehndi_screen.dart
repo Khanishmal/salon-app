@@ -1,13 +1,17 @@
-// lib/screens/customer/ar_mehndi_screen.dart
+// lib/customer/ar_mehndi_screen.dart
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import 'ar_face_engine.dart';
 
@@ -27,6 +31,9 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
   bool _capturing = false;
   int _selectedPattern = 0;
   double _intensity = 0.85;
+  bool _photoMode = false;
+  File? _uploadedImage;
+  bool _isProcessing = false;
 
   final List<Map<String, dynamic>> _hennaPatterns = [
     {'name': 'Bridal Mandala', 'color': const Color(0xFF4A2C00), 'style': 'Traditional'},
@@ -34,6 +41,7 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
     {'name': 'Pakistani', 'color': const Color(0xFF2B1900), 'style': 'Pakistani'},
     {'name': 'Finger Design', 'color': const Color(0xFF5C2C16), 'style': 'Finger'},
     {'name': 'Back Hand', 'color': const Color(0xFF3D1E00), 'style': 'Back Hand'},
+    {'name': 'Full Hand', 'color': const Color(0xFF1A0A00), 'style': 'Full'},
   ];
 
   @override
@@ -83,13 +91,99 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
       await f.writeAsBytes(data.buffer.asUint8List());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('📸 Mehndi design saved!'),
-              backgroundColor: Color(0xFF4A2C00)),
+          const SnackBar(
+            content: Text('📸 Mehndi design saved!'),
+            backgroundColor: Color(0xFF4A2C00),
+          ),
         );
       }
     } finally {
       await _engine.startStream();
       if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  Future<void> _uploadPhoto() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _uploadedImage = File(image.path);
+        _photoMode = true;
+      });
+    }
+  }
+
+  Future<void> _applyAIMehndi() async {
+    if (_uploadedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload a hand photo first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+
+    try {
+      final bytes = await _uploadedImage!.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      final pattern = _hennaPatterns[_selectedPattern];
+      
+      final response = await http.post(
+        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=YOUR_API_KEY'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                {
+                  'text': '''
+Apply a beautiful mehndi design to this hand photo.
+Design style: ${pattern['style']}
+Design name: ${pattern['name']}
+Color: ${pattern['color'].toString()}
+Intensity: ${(_intensity * 100).toStringAsFixed(0)}%
+
+Make the mehndi look realistic and natural on the hand.
+'''
+                },
+                {
+                  'inline_data': {
+                    'mime_type': 'image/jpeg',
+                    'data': base64Image,
+                  }
+                }
+              ]
+            }
+          ]
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Mehndi applied successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception('Failed to apply mehndi');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isProcessing = false);
     }
   }
 
@@ -146,8 +240,10 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('Align face in frame',
-                    style: TextStyle(color: Colors.white60)),
+                child: const Text(
+                  'Show your hand or face',
+                  style: TextStyle(color: Colors.white60),
+                ),
               ),
             ),
         ],
@@ -173,11 +269,21 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
               children: [
                 _iconBtn(Icons.arrow_back_ios_rounded, () => Navigator.pop(context)),
                 const SizedBox(width: 10),
-                Text('Mehndi Try-On',
-                    style: GoogleFonts.cormorantGaramond(
-                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
+                Text(
+                  'Mehndi Try-On',
+                  style: GoogleFonts.cormorantGaramond(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const Spacer(),
-                _iconBtn(_capturing ? Icons.hourglass_top : Icons.camera_alt_rounded, _capture),
+                _iconBtn(Icons.photo_rounded, _uploadPhoto),
+                const SizedBox(width: 8),
+                _iconBtn(
+                  _capturing ? Icons.hourglass_top : Icons.camera_alt_rounded,
+                  _capture,
+                ),
               ],
             ),
           ),
@@ -211,28 +317,35 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
                       margin: const EdgeInsets.symmetric(horizontal: 6),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFF8B4513).withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                        color: isSelected 
+                            ? const Color(0xFF8B4513).withOpacity(0.2) 
+                            : Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: isSelected ? const Color(0xFF8B4513) : Colors.white24),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF8B4513) : Colors.white24,
+                        ),
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            width: 40, height: 40,
+                            width: 35, 
+                            height: 35,
                             decoration: BoxDecoration(
                               color: pattern['color'],
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(pattern['name'],
-                              style: TextStyle(
-                                color: isSelected ? const Color(0xFF8B4513) : Colors.white70,
-                                fontSize: 10,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              textAlign: TextAlign.center),
+                          const SizedBox(height: 4),
+                          Text(
+                            pattern['name'],
+                            style: TextStyle(
+                              color: isSelected ? const Color(0xFF8B4513) : Colors.white70,
+                              fontSize: 9,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ],
                       ),
                     ),
@@ -240,7 +353,7 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
                 },
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             
             // Intensity slider
             Row(
@@ -257,10 +370,44 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
                     onChanged: (v) => setState(() => _intensity = v),
                   ),
                 ),
-                Text('${(_intensity * 100).toInt()}%',
-                    style: const TextStyle(color: Colors.white70)),
+                Text(
+                  '${(_intensity * 100).toInt()}%',
+                  style: const TextStyle(color: Colors.white70),
+                ),
               ],
             ),
+            
+            // AI Apply button (for photo mode)
+            if (_photoMode && _uploadedImage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isProcessing ? null : _applyAIMehndi,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B4513),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isProcessing
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Apply AI Mehndi ✨',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -272,14 +419,18 @@ class _ArMehndiScreenState extends State<ArMehndiScreen>
     child: Container(
       width: 38, height: 38,
       decoration: BoxDecoration(
-        color: Colors.black38, shape: BoxShape.circle,
+        color: Colors.black38, 
+        shape: BoxShape.circle,
         border: Border.all(color: Colors.white.withOpacity(0.15))),
       child: Icon(icon, color: Colors.white, size: 18),
     ),
   );
 }
 
-// Mehndi Painter
+// =============================================================================
+// MEHNDI PAINTER
+// =============================================================================
+
 class MehndiPainter extends CustomPainter {
   final Face face;
   final Size imageSize;
@@ -356,9 +507,71 @@ class MehndiPainter extends CustomPainter {
     // Forehead border
     final foreheadPath = Path()
       ..moveTo(bounds.left + bounds.width * 0.15, bounds.top + bounds.height * 0.05)
-      ..quadraticBezierTo(bounds.center.dx, bounds.top - bounds.height * 0.02,
-          bounds.right - bounds.width * 0.15, bounds.top + bounds.height * 0.05);
+      ..quadraticBezierTo(
+        bounds.center.dx, 
+        bounds.top - bounds.height * 0.02,
+        bounds.right - bounds.width * 0.15, 
+        bounds.top + bounds.height * 0.05
+      );
     canvas.drawPath(foreheadPath, paint..strokeWidth = 2.0);
+
+    // Decorative side patterns
+    final leftSide = Path()
+      ..moveTo(bounds.left + bounds.width * 0.1, bounds.top + bounds.height * 0.2)
+      ..quadraticBezierTo(
+        bounds.left - bounds.width * 0.05,
+        bounds.top + bounds.height * 0.35,
+        bounds.left + bounds.width * 0.1,
+        bounds.top + bounds.height * 0.5,
+      );
+    canvas.drawPath(leftSide, paint..strokeWidth = 1.5);
+
+    final rightSide = Path()
+      ..moveTo(bounds.right - bounds.width * 0.1, bounds.top + bounds.height * 0.2)
+      ..quadraticBezierTo(
+        bounds.right + bounds.width * 0.05,
+        bounds.top + bounds.height * 0.35,
+        bounds.right - bounds.width * 0.1,
+        bounds.top + bounds.height * 0.5,
+      );
+    canvas.drawPath(rightSide, paint..strokeWidth = 1.5);
+
+    // Pattern-specific details
+    if (pattern['style'] == 'Traditional' || pattern['style'] == 'Pakistani') {
+      // Additional traditional elements
+      for (int i = 0; i < 6; i++) {
+        final angle = i * 2 * math.pi / 6 + math.pi / 6;
+        final petal = Offset(
+          center.dx + (radius * 0.45) * math.cos(angle),
+          center.dy + (radius * 0.45) * math.sin(angle),
+        );
+        canvas.drawCircle(petal, radius * 0.06, fillPaint);
+      }
+    }
+
+    if (pattern['style'] == 'Arabic') {
+      // Arabic-style floral elements
+      for (int i = 0; i < 8; i++) {
+        final angle = i * 2 * math.pi / 8;
+        final floral = Offset(
+          center.dx + (radius * 0.35) * math.cos(angle),
+          center.dy + (radius * 0.35) * math.sin(angle),
+        );
+        canvas.drawCircle(floral, radius * 0.04, fillPaint);
+        // Small petals
+        for (int j = 0; j < 3; j++) {
+          final a = angle + j * 2 * math.pi / 3;
+          canvas.drawCircle(
+            Offset(
+              floral.dx + radius * 0.06 * math.cos(a),
+              floral.dy + radius * 0.06 * math.sin(a),
+            ),
+            radius * 0.02,
+            fillPaint,
+          );
+        }
+      }
+    }
   }
 
   Rect _bbox(List<Offset> pts) {

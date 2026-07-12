@@ -1,4 +1,4 @@
-//lib/customer/ar_face_engine.dart
+// lib/customer/ar_face_engine.dart
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -234,15 +234,19 @@ class ArCoordTransform {
       case InputImageRotation.rotation0deg:
         rotatedX = x;
         rotatedY = y;
+        break;
       case InputImageRotation.rotation90deg:
         rotatedX = ih - y;
         rotatedY = x;
+        break;
       case InputImageRotation.rotation180deg:
         rotatedX = iw - x;
         rotatedY = ih - y;
+        break;
       case InputImageRotation.rotation270deg:
         rotatedX = y;
         rotatedY = iw - x;
+        break;
     }
 
     final logicalWidth = (rotation == InputImageRotation.rotation90deg || rotation == InputImageRotation.rotation270deg) ? ih : iw;

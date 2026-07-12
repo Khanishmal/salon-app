@@ -1,6 +1,4 @@
-// lib/screens/customer/ar_makeup_screen.dart
-
-
+// lib/customer/ar_makeup_screen.dart
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -11,6 +9,9 @@ import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import 'ar_face_engine.dart';
 
@@ -23,59 +24,48 @@ enum EyeshadowStyle { gradient, smoky, cutCrease }
 enum LipFinish { matte, gloss, satin, metallic }
 
 class MakeupConfig {
-  // Foundation - Full face
   bool foundationOn = false;
   Color foundationColor = const Color(0xFFEEBE9A);
   double foundationOpacity = 0.30;
 
-  // Concealer - Under eyes
   bool concealerOn = false;
   Color concealerColor = const Color(0xFFF5D5B0);
   double concealerOpacity = 0.40;
 
-  // Contour - Cheeks, jawline, nose
   bool contourOn = false;
   Color contourColor = const Color(0xFFA0683C);
   double contourOpacity = 0.42;
 
-  // Blush - Cheeks only
   bool blushOn = false;
   Color blushColor = const Color(0xFFE8736E);
   double blushOpacity = 0.52;
 
-  // Highlighter - Cheekbones, nose bridge
   bool highlighterOn = false;
   Color highlighterColor = const Color(0xFFFFF0C8);
   double highlighterOpacity = 0.55;
 
-  // Eyebrow
   bool eyebrowOn = false;
   Color eyebrowColor = const Color(0xFF3D2314);
   double eyebrowOpacity = 0.72;
 
-  // Eyeshadow - Eyelid only
   bool eyeshadowOn = false;
   Color eyeshadowColor = const Color(0xFF8B4A6E);
   double eyeshadowOpacity = 0.62;
   bool eyeshadowShimmer = false;
   EyeshadowStyle eyeshadowStyle = EyeshadowStyle.gradient;
 
-  // Eyeliner - Eye outline
   bool eyelinerOn = false;
   Color eyelinerColor = const Color(0xFF1A0A0A);
   double eyelinerOpacity = 0.90;
   EyelinerStyle eyelinerStyle = EyelinerStyle.natural;
 
-  // Mascara - Lashes only
   bool mascaraOn = false;
   double mascaraOpacity = 0.85;
 
-  // Lip Liner - Lip outline
   bool lipLinerOn = false;
   Color lipLinerColor = const Color(0xFF8B1A2A);
   double lipLinerOpacity = 0.82;
 
-  // Lipstick - Lips only (NOT teeth)
   bool lipstickOn = false;
   Color lipstickColor = const Color(0xFFC8384E);
   double lipstickOpacity = 0.78;
@@ -102,6 +92,9 @@ class _ArMakeupScreenState extends State<ArMakeupScreen>
   int _tab = 0;
   bool _capturing = false;
   final _previewKey = GlobalKey();
+  bool _photoMode = false;
+  File? _uploadedImage;
+  bool _isProcessing = false;
 
   // Preset looks
   static const _looks = {
@@ -286,6 +279,64 @@ class _ArMakeupScreenState extends State<ArMakeupScreen>
     _cfg.lipLinerOn = _cfg.lipstickOn = false;
   });
 
+  Future<void> _uploadPhoto() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _uploadedImage = File(image.path);
+        _photoMode = true;
+      });
+    }
+  }
+
+  Future<void> _applyAIMakeup() async {
+    if (_uploadedImage == null) return;
+    setState(() => _isProcessing = true);
+
+    try {
+      // Convert image to base64
+      final bytes = await _uploadedImage!.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      // Call NanoBanana API (or Gemini API) for makeup application
+      // This is a placeholder - replace with actual API call
+      final response = await http.post(
+        Uri.parse('YOUR_API_ENDPOINT'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer YOUR_API_KEY',
+        },
+        body: jsonEncode({
+          'image': base64Image,
+          'makeup_style': 'bridal',
+          'intensity': 0.8,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        // Process the response and apply makeup
+        // This would typically return a processed image or makeup parameters
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ AI makeup applied successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -385,6 +436,8 @@ class _ArMakeupScreenState extends State<ArMakeupScreen>
                       ),
                     ),
                     const Spacer(),
+                    _iconBtn(Icons.photo_rounded, _uploadPhoto),
+                    const SizedBox(width: 8),
                     _iconBtn(Icons.refresh_rounded, _resetAll),
                     const SizedBox(width: 8),
                     _iconBtn(
@@ -965,15 +1018,19 @@ class MakeupPainter extends CustomPainter {
       case InputImageRotation.rotation0deg:
         rx = x;
         ry = y;
+        break;
       case InputImageRotation.rotation90deg:
         rx = ih - y;
         ry = x;
+        break;
       case InputImageRotation.rotation180deg:
         rx = iw - x;
         ry = ih - y;
+        break;
       case InputImageRotation.rotation270deg:
         rx = y;
         ry = iw - x;
+        break;
     }
 
     final lw = (rotation == InputImageRotation.rotation90deg ||
@@ -1065,7 +1122,6 @@ class MakeupPainter extends CustomPainter {
     }
   }
 
-  // Foundation - Full face coverage
   void _drawFoundation(Canvas c, List<Offset> oval) {
     final path = _closed(oval);
 
@@ -1087,7 +1143,6 @@ class MakeupPainter extends CustomPainter {
     );
   }
 
-  // Concealer - Under eyes with radial gradient
   void _drawConcealer(Canvas c, Rect le, Rect re) {
     void under(Rect r) {
       if (r.isEmpty) return;
@@ -1120,7 +1175,6 @@ class MakeupPainter extends CustomPainter {
     under(re);
   }
 
-  // Contour - Cheeks, jawline, nose
   void _drawContour(Canvas c, List<Offset> oval, Rect fr,
       List<Offset> nose, double lf, double rf) {
     final col = config.contourColor;
@@ -1190,7 +1244,6 @@ class MakeupPainter extends CustomPainter {
     }
   }
 
-  // Highlighter - Cheekbones, nose bridge, brow bones
   void _drawHighlighter(Canvas c, Rect le, Rect re, List<Offset> nb, Rect fr,
       double lf, double rf) {
     final col = config.highlighterColor;
@@ -1251,7 +1304,6 @@ class MakeupPainter extends CustomPainter {
     if (nb.isNotEmpty) glow(_cen(nb), fw * 0.038, fh * 0.022, 1.0);
   }
 
-  // Blush - Cheeks only with directional gradient
   void _drawBlush(Canvas c, Rect fr, double lf, double rf) {
     final col = config.blushColor;
     final op = config.blushOpacity;
@@ -1284,7 +1336,6 @@ class MakeupPainter extends CustomPainter {
     side(fr.right - fw * 0.17, rf);
   }
 
-  // Eyebrows
   void _drawEyebrows(Canvas c, List<Offset> lt, List<Offset> lb,
       List<Offset> rt, List<Offset> rb) {
     void brow(List<Offset> top, List<Offset> bot) {
@@ -1314,7 +1365,6 @@ class MakeupPainter extends CustomPainter {
     brow(rt, rb);
   }
 
-  // Eyeshadow - 3D-enhanced with multiple styles
   void _drawEyeshadow(Canvas c, List<Offset> le, List<Offset> re,
       double lf, double rf) {
     void shadow(List<Offset> eye, double factor) {
@@ -1358,6 +1408,7 @@ class MakeupPainter extends CustomPainter {
               )
               ..blendMode = BlendMode.multiply,
           );
+          break;
 
         case EyeshadowStyle.smoky:
           for (int i = 0; i < 2; i++) {
@@ -1381,6 +1432,7 @@ class MakeupPainter extends CustomPainter {
                 ..blendMode = BlendMode.multiply,
             );
           }
+          break;
 
         case EyeshadowStyle.cutCrease:
           c.drawOval(
@@ -1413,6 +1465,7 @@ class MakeupPainter extends CustomPainter {
               ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
               ..blendMode = BlendMode.multiply,
           );
+          break;
       }
 
       if (config.eyeshadowShimmer) {
@@ -1440,7 +1493,6 @@ class MakeupPainter extends CustomPainter {
     shadow(re, rf);
   }
 
-  // Eyeliner with styles
   void _drawEyeliner(Canvas c, List<Offset> le, List<Offset> re,
       double lf, double rf) {
     void liner(List<Offset> eye, double factor, bool isLeft) {
@@ -1530,7 +1582,6 @@ class MakeupPainter extends CustomPainter {
     liner(re, rf, false);
   }
 
-  // Mascara - Lashes with natural variation
   void _drawMascara(Canvas c, List<Offset> le, List<Offset> re,
       double lf, double rf) {
     void lashes(List<Offset> eye, double factor) {
@@ -1586,7 +1637,6 @@ class MakeupPainter extends CustomPainter {
     lashes(re, rf);
   }
 
-  // Lip Liner - Outline only
   void _drawLipLiner(Canvas c, List<Offset> ut, List<Offset> lb) {
     final all = [...ut, ...lb.reversed];
 
@@ -1604,22 +1654,18 @@ class MakeupPainter extends CustomPainter {
     );
   }
 
-  // Lipstick - CRITICAL: Only lips, not teeth!
   void _drawLipstick(Canvas c, List<Offset> ut, List<Offset> ub,
       List<Offset> lt, List<Offset> lb) {
     if (ut.isEmpty || lb.isEmpty) return;
 
-    // Create separate paths for upper and lower lips
     final upper = _lipHalf(ut, ub);
     final lower = _lipHalf(lt, lb);
 
     final col = config.lipstickColor;
     final op = config.lipstickOpacity;
 
-    // Apply lipstick with appropriate blend mode
     final bm = _isLight(col) ? BlendMode.overlay : BlendMode.multiply;
 
-    // Upper lip
     c.drawPath(
       upper,
       Paint()
@@ -1627,7 +1673,6 @@ class MakeupPainter extends CustomPainter {
         ..blendMode = bm,
     );
 
-    // Lower lip (usually darker)
     c.drawPath(
       lower,
       Paint()
@@ -1635,7 +1680,6 @@ class MakeupPainter extends CustomPainter {
         ..blendMode = bm,
     );
 
-    // Lip finish effects
     switch (config.lipFinish) {
       case LipFinish.gloss:
         if (lb.isNotEmpty) {
@@ -1658,6 +1702,7 @@ class MakeupPainter extends CustomPainter {
               ..blendMode = BlendMode.screen,
           );
         }
+        break;
 
       case LipFinish.satin:
         if (lb.isNotEmpty) {
@@ -1678,6 +1723,7 @@ class MakeupPainter extends CustomPainter {
               ..blendMode = BlendMode.screen,
           );
         }
+        break;
 
       case LipFinish.metallic:
         c.drawPath(
@@ -1693,12 +1739,12 @@ class MakeupPainter extends CustomPainter {
             ..color = _darken(col, 0.3).withOpacity(0.18)
             ..blendMode = BlendMode.multiply,
         );
+        break;
 
       case LipFinish.matte:
         break;
     }
 
-    // Lip definition
     if (ub.isNotEmpty) {
       c.drawPath(
         _smooth(ub),

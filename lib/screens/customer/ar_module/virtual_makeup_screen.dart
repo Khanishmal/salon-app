@@ -7,8 +7,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../models/makeup_configuration.dart';
-import '../../painters/makeup_painter.dart';
+import '../../../models/makeup_configuration.dart';
+import '../../../painters/makeup_painter.dart';
 
 class VirtualMakeupScreen extends StatefulWidget {
   const VirtualMakeupScreen({super.key});

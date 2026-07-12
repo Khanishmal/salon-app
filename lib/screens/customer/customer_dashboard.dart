@@ -10,9 +10,8 @@ import 'nearby_salons.dart';
 import 'booking_calendar.dart';
 import 'real_time_chat.dart';
 // AR Feature Hub Modules 
-import 'ar_try_on_suite.dart';
-import 'ar_makeup_screen.dart';
-import 'ai_advisor_screen.dart';
+import 'ar_module/ar_makeup_screen.dart';
+import 'ar_module/ar_ai_analysis_screen.dart';
 import 'product_shop.dart';
 import 'loyalty_screen.dart';
 import '../signin_screen.dart';
@@ -20,7 +19,9 @@ import 'inbox_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'services_menu_screen.dart';
-import 'virtual_makeup_screen.dart';
+import 'ar_module/virtual_makeup_screen.dart';
+import 'ar_module/ar_try_on_suite.dart';
+
 class CustomerDashboard extends StatefulWidget {
   const CustomerDashboard({super.key});
 

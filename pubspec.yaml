@@ -1,4 +1,3 @@
-#pubspec.yaml
 name: salon_management_app
 description: "AI-Powered Salon Management System"
 publish_to: 'none'
@@ -57,7 +56,7 @@ dependencies:
   http: ^1.2.1
   image: ^4.1.4
   google_generative_ai: ^0.4.0
-  
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

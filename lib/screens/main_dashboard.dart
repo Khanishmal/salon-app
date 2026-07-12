@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'signin_screen.dart'; 
 import 'vendor/vendor_screen.dart'; 
-import 'customer/ar_makeup_screen.dart';
+import 'customer/ar_module/virtual_makeup_screen.dart';
 import 'customer/customer_dashboard.dart';
 import 'customer/product_shop.dart';
 import 'customer/booking_calendar.dart';
@@ -332,7 +332,7 @@ class GlowSalonDashboard extends StatelessWidget {
             if (title == 'Makeup') {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ArMakeupScreen()),
+                MaterialPageRoute(builder: (context) => const VirtualMakeupScreen()),
               );
             } else if (title == 'Spa' || title == 'Facials') {
               Navigator.push(
