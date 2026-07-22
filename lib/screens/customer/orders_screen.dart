@@ -1,4 +1,3 @@
-// lib/screens/customer/customer_orders_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,17 +16,20 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String _selectedFilter = 'All';
 
-  final List<String> _filters = ['All', 'Placed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
+  // REMOVED 'Placed' from filters - replaced with 'Pending'
+  final List<String> _filters = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: const Text(
           'My Orders',
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFFF2845C),
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -39,6 +41,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
           Container(
             height: 50,
             padding: const EdgeInsets.symmetric(horizontal: 12),
+            color: Colors.white,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _filters.length,
@@ -53,12 +56,17 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                     onSelected: (_) {
                       setState(() => _selectedFilter = filter);
                     },
-                    backgroundColor: Colors.white,
+                    backgroundColor: Colors.grey[100],
                     selectedColor: const Color(0xFFFDEEE9),
                     checkmarkColor: const Color(0xFFF2845C),
                     labelStyle: TextStyle(
-                      color: isSelected ? const Color(0xFFF2845C) : Colors.grey.shade700,
+                      color: isSelected ? const Color(0xFFF2845C) : Colors.grey[700],
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: isSelected ? const Color(0xFFF2845C) : Colors.transparent,
+                      ),
                     ),
                   ),
                 );
@@ -87,12 +95,34 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, size: 40, color: Colors.red[300]),
+                        Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error loading orders',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[700],
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        const Text('Error loading orders'),
-                        ElevatedButton(
+                        Text(
+                          'Please create the required Firestore index for orders.\n\nIndex: customerId (Ascending) + createdAt (Descending)',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
                           onPressed: () => setState(() {}),
-                          child: const Text('Retry'),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF2845C),
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ],
                     ),
@@ -111,6 +141,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -119,6 +150,20 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                           style: GoogleFonts.poppins(
                             fontSize: 14,
                             color: Colors.grey[400],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.shopping_bag),
+                          label: const Text('Start Shopping'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF2845C),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ],
@@ -131,17 +176,32 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                 if (_selectedFilter != 'All') {
                   orders = orders.where((doc) {
                     var data = doc.data() as Map<String, dynamic>;
-                    return data['orderStatus'] == _selectedFilter.toLowerCase();
+                    final status = data['orderStatus'] ?? 'placed';
+                    
+                    // Map 'placed' to 'Pending' for display
+                    String displayStatus = status == 'placed' ? 'Pending' : 
+                        status.substring(0, 1).toUpperCase() + status.substring(1);
+                    
+                    return displayStatus == _selectedFilter;
                   }).toList();
                 }
 
                 if (orders.isEmpty) {
                   return Center(
-                    child: Text(
-                      'No $_selectedFilter orders',
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[500],
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.filter_list_off, size: 40, color: Colors.grey[400]),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No $_selectedFilter orders',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }
@@ -165,21 +225,27 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
 
   Widget _buildOrderCard(String orderId, Map<String, dynamic> data) {
     String status = data['orderStatus'] ?? 'placed';
-    String paymentStatus = data['paymentStatus'] ?? 'pending';
+    // Convert status for display
+    String displayStatus = status == 'placed' ? 'Pending' : 
+        status.substring(0, 1).toUpperCase() + status.substring(1);
+    
     double total = (data['total'] ?? 0).toDouble();
     int itemsCount = (data['items'] ?? []).length;
     Timestamp? createdAt = data['createdAt'] as Timestamp?;
     String deliveryMethod = data['deliveryLabel'] ?? 'Standard';
     String estimatedDelivery = data['estimatedDelivery'] ?? '';
 
+    // Map status to config (using displayStatus for colors)
     Map<String, dynamic> statusConfig = _getStatusConfig(status);
-    Map<String, dynamic> paymentConfig = _getPaymentStatusConfig(paymentStatus);
+    // Payment status - removed pending display
+    Map<String, dynamic> paymentConfig = _getPaymentStatusConfig(data['paymentStatus'] ?? 'pending');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
+      elevation: 2,
       child: ExpansionTile(
         leading: Container(
           padding: const EdgeInsets.all(10),
@@ -198,6 +264,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Color(0xFF2D3A4B),
+            fontSize: 15,
           ),
         ),
         subtitle: Column(
@@ -205,19 +272,21 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
           children: [
             Text(
               '$itemsCount items • ${DateFormat('MMM d, yyyy').format(createdAt?.toDate() ?? DateTime.now())}',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
             const SizedBox(height: 4),
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: statusConfig['color'].withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    status.toUpperCase(),
+                    displayStatus.toUpperCase(),
                     style: TextStyle(
                       fontSize: 10,
                       color: statusConfig['color'],
@@ -225,22 +294,39 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: paymentConfig['color'].withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    paymentConfig['label'].toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: paymentConfig['color'],
-                      fontWeight: FontWeight.w600,
+                // Only show payment status if not pending
+                if (data['paymentStatus'] != 'pending' && data['paymentStatus'] != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: paymentConfig['color'].withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      paymentConfig['label'].toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: paymentConfig['color'],
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
+                if (deliveryMethod.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      deliveryMethod.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ],
@@ -256,13 +342,14 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                 fontSize: 16,
               ),
             ),
-            Text(
-              deliveryMethod,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[400],
+            if (estimatedDelivery.isNotEmpty)
+              Text(
+                'Est: $estimatedDelivery',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey[500],
+                ),
               ),
-            ),
           ],
         ),
         children: [
@@ -280,10 +367,21 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Order Details
+                const Text(
+                  'Order Details',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Color(0xFF2D3A4B),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 _buildDetailRow('Order ID', orderId),
                 _buildDetailRow('Date', DateFormat('MMM d, yyyy • h:mm a').format(createdAt?.toDate() ?? DateTime.now())),
-                _buildDetailRow('Status', status.toUpperCase()),
-                _buildDetailRow('Payment', paymentConfig['label']),
+                _buildDetailRow('Status', displayStatus),
+                // Only show payment if not pending
+                if (data['paymentStatus'] != 'pending' && data['paymentStatus'] != null)
+                  _buildDetailRow('Payment', paymentConfig['label']),
                 _buildDetailRow('Delivery', deliveryMethod),
                 if (estimatedDelivery.isNotEmpty)
                   _buildDetailRow('Estimated Delivery', estimatedDelivery),
@@ -310,8 +408,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                 const SizedBox(height: 16),
                 
                 // Order Actions
-                if (status == 'placed' || status == 'processing')
-                  _buildOrderActions(orderId, status),
+                _buildOrderActions(orderId, status),
               ],
             ),
           ),
@@ -330,8 +427,8 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
         return {'color': Colors.orange, 'icon': Icons.hourglass_top, 'label': 'Processing'};
       case 'cancelled':
         return {'color': Colors.red, 'icon': Icons.cancel, 'label': 'Cancelled'};
-      default:
-        return {'color': Colors.grey, 'icon': Icons.pending, 'label': 'Placed'};
+      default: // placed
+        return {'color': Colors.grey, 'icon': Icons.pending, 'label': 'Pending'};
     }
   }
 
@@ -355,7 +452,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
           Text(
             label,
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: Colors.grey[600],
               fontSize: 13,
             ),
           ),
@@ -375,10 +472,11 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
   Widget _buildOrderItem(Map<String, dynamic> item) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
         children: [
@@ -396,7 +494,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                   : null,
             ),
             child: item['imageUrl'] == null || item['imageUrl'].toString().isEmpty
-                ? const Icon(Icons.image, color: Color(0xFFF2845C))
+                ? const Icon(Icons.image, color: Color(0xFFF2845C), size: 24)
                 : null,
           ),
           const SizedBox(width: 12),
@@ -409,6 +507,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 14,
+                    color: Color(0xFF2D3A4B),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -417,7 +516,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                   'Qty: ${item['quantity'] ?? 1}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: Colors.grey[600],
                   ),
                 ),
               ],
@@ -437,28 +536,59 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
   }
 
   Widget _buildOrderActions(String orderId, String status) {
+    List<Widget> actions = [];
+
+    // Cancel button for pending/processing orders
+    if (status == 'placed' || status == 'processing') {
+      actions.add(
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _cancelOrder(orderId),
+            icon: const Icon(Icons.cancel, size: 18),
+            label: const Text('Cancel Order'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Delete button for cancelled orders
+    if (status == 'cancelled') {
+      actions.add(
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _deleteOrder(orderId),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Delete Order'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (actions.isEmpty) {
+      return const SizedBox();
+    }
+
     return Column(
       children: [
         const Divider(),
         Row(
-          children: [
-            if (status == 'placed') ...[
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _cancelOrder(orderId),
-                  icon: const Icon(Icons.cancel, size: 18),
-                  label: const Text('Cancel Order'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
+          children: actions,
         ),
       ],
     );
@@ -468,6 +598,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Cancel Order'),
         content: const Text('Are you sure you want to cancel this order?'),
         actions: [
@@ -485,18 +616,67 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Order cancelled'),
+                    content: Text('Order cancelled successfully'),
                     backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
                   ),
                 );
+                setState(() {});
               } catch (e) {
+                Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error cancelling order: ${e.toString()}')),
+                  SnackBar(
+                    content: Text('Error cancelling order: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
               }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteOrder(String orderId) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Order'),
+        content: const Text('Are you sure you want to delete this order? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await _firestore.collection('orders').doc(orderId).delete();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Order deleted successfully'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                setState(() {});
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error deleting order: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),

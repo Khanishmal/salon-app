@@ -1,4 +1,3 @@
-// lib/screens/vendor/vendor_orders_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,8 +16,15 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String _selectedFilter = 'All';
   bool _isLoading = true;
-  
-  final List<String> _filters = ['All', 'Pending', 'Processing', 'Shipped', 'Completed', 'Cancelled'];
+
+  final List<String> _filters = [
+    'All',
+    'Pending',
+    'Processing',
+    'Shipped',
+    'Completed',
+    'Cancelled'
+  ];
 
   @override
   void initState() {
@@ -26,6 +32,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
     _checkOrders();
   }
 
+  
   Future<void> _checkOrders() async {
     setState(() => _isLoading = true);
     try {
@@ -49,6 +56,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFFF2845C),
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
@@ -66,6 +74,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
           Container(
             height: 50,
             padding: const EdgeInsets.symmetric(horizontal: 12),
+            color: Colors.white,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _filters.length,
@@ -84,8 +93,18 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                     selectedColor: const Color(0xFFFDEEE9),
                     checkmarkColor: const Color(0xFFF2845C),
                     labelStyle: TextStyle(
-                      color: isSelected ? const Color(0xFFF2845C) : Colors.grey.shade700,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected
+                          ? const Color(0xFFF2845C)
+                          : Colors.grey.shade700,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: isSelected
+                            ? const Color(0xFFF2845C)
+                            : Colors.transparent,
+                      ),
                     ),
                   ),
                 );
@@ -97,7 +116,8 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
             child: _isLoading
                 ? const Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
                     ),
                   )
                 : StreamBuilder<QuerySnapshot>(
@@ -110,7 +130,8 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFFF2845C)),
                           ),
                         );
                       }
@@ -120,7 +141,8 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                              Icon(Icons.error_outline,
+                                  size: 48, color: Colors.red[300]),
                               const SizedBox(height: 16),
                               Text(
                                 'Error loading orders',
@@ -131,15 +153,12 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 24),
-                                child: Text(
-                                  'Please create the required Firestore index for orders.\n\nIndex: vendorId (Ascending) + createdAt (Descending)',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 13,
-                                    color: Colors.grey[600],
-                                  ),
+                              Text(
+                                'Please create the required Firestore index for orders.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -162,7 +181,8 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.shopping_bag_outlined, size: 60, color: Colors.grey[300]),
+                              Icon(Icons.shopping_bag_outlined,
+                                  size: 60, color: Colors.grey[300]),
                               const SizedBox(height: 16),
                               Text(
                                 'No Orders Yet',
@@ -186,11 +206,13 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
 
                       var orders = snapshot.data!.docs;
 
-                      // Apply filter
                       if (_selectedFilter != 'All') {
                         orders = orders.where((doc) {
                           var data = doc.data() as Map<String, dynamic>;
-                          return data['status'] == _selectedFilter;
+                          final status =
+                              data['status'] ?? data['orderStatus'] ?? 'placed';
+                          return status.toLowerCase() ==
+                              _selectedFilter.toLowerCase();
                         }).toList();
                       }
 
@@ -199,7 +221,8 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.filter_list_off, size: 40, color: Colors.grey[400]),
+                              Icon(Icons.filter_list_off,
+                                  size: 40, color: Colors.grey[400]),
                               const SizedBox(height: 8),
                               Text(
                                 'No $_selectedFilter orders',
@@ -230,31 +253,30 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
   }
 
   Widget _buildOrderCard(String orderId, Map<String, dynamic> data) {
-    String status = data['status'] ?? 'pending';
+    String status = data['status'] ?? data['orderStatus'] ?? 'placed';
     String customerName = data['customerName'] ?? 'Customer';
     String customerEmail = data['customerEmail'] ?? '';
-    double amount = (data['amount'] ?? 0).toDouble();
+    double amount = (data['amount'] ?? data['total'] ?? 0).toDouble();
     int items = (data['items'] ?? []).length;
     Timestamp? createdAt = data['createdAt'] as Timestamp?;
-    String shippingStatus = data['shippingStatus'] ?? 'pending';
     String shippingAddress = data['shippingAddress'] ?? 'No address provided';
 
     // Status colors and icons
     Color statusColor;
     IconData statusIcon;
-    
+
     switch (status) {
       case 'completed':
         statusColor = Colors.green;
         statusIcon = Icons.check_circle;
         break;
-      case 'processing':
-        statusColor = Colors.blue;
-        statusIcon = Icons.hourglass_top;
-        break;
       case 'shipped':
-        statusColor = Colors.purple;
+        statusColor = Colors.blue;
         statusIcon = Icons.local_shipping;
+        break;
+      case 'processing':
+        statusColor = Colors.purple;
+        statusIcon = Icons.hourglass_top;
         break;
       case 'cancelled':
         statusColor = Colors.red;
@@ -263,28 +285,6 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
       default:
         statusColor = Colors.orange;
         statusIcon = Icons.pending;
-    }
-
-    // Shipping status colors
-    Color shippingColor;
-    String shippingLabel;
-    
-    switch (shippingStatus) {
-      case 'delivered':
-        shippingColor = Colors.green;
-        shippingLabel = 'Delivered';
-        break;
-      case 'shipped':
-        shippingColor = Colors.blue;
-        shippingLabel = 'Shipped';
-        break;
-      case 'cancelled':
-        shippingColor = Colors.red;
-        shippingLabel = 'Cancelled';
-        break;
-      default:
-        shippingColor = Colors.orange;
-        shippingLabel = 'Processing';
     }
 
     String formattedDate = createdAt != null
@@ -296,6 +296,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
+      elevation: 2,
       child: ExpansionTile(
         leading: Container(
           padding: const EdgeInsets.all(10),
@@ -310,6 +311,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Color(0xFF2D3A4B),
+            fontSize: 15,
           ),
         ),
         subtitle: Column(
@@ -317,43 +319,23 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
           children: [
             Text(
               '$customerName • $items items',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             ),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    status.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                status.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: statusColor,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: shippingColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    shippingLabel.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: shippingColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -392,20 +374,34 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Customer Info
-                _buildSectionHeader('Customer Information'),
+                const Text(
+                  'Customer Information',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF2D3A4B),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 _buildDetailRow('Name', customerName),
                 if (customerEmail.isNotEmpty)
                   _buildDetailRow('Email', customerEmail),
                 _buildDetailRow('Order ID', orderId),
                 _buildDetailRow('Date', formattedDate),
-                _buildDetailRow('Total Amount', 'Rs. ${NumberFormat('#,###').format(amount)}'),
+                _buildDetailRow('Total Amount',
+                    'Rs. ${NumberFormat('#,###').format(amount)}'),
                 _buildDetailRow('Items', items.toString()),
                 _buildDetailRow('Status', status.toUpperCase()),
-                _buildDetailRow('Shipping', shippingLabel),
-                
+
                 const SizedBox(height: 8),
-                _buildSectionHeader('Shipping Address'),
+                const Text(
+                  'Shipping Address',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF2D3A4B),
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   shippingAddress,
@@ -415,11 +411,18 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                     height: 1.4,
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                _buildSectionHeader('Order Items'),
+                const Text(
+                  'Order Items',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF2D3A4B),
+                  ),
+                ),
                 const SizedBox(height: 8),
-                
+
                 if (data['items'] != null && data['items'].isNotEmpty)
                   ...List.generate(
                     (data['items'] as List).length,
@@ -428,26 +431,15 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                       return _buildOrderItemWidget(item);
                     },
                   ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Action Buttons
-                _buildActionButtons(orderId, status, shippingStatus),
+                _buildActionButtons(orderId, status),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontWeight: FontWeight.bold,
-        fontSize: 14,
-        color: Color(0xFF2D3A4B),
       ),
     );
   }
@@ -461,7 +453,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
           Text(
             label,
             style: TextStyle(
-              color: Colors.grey.shade600,
+              color: Colors.grey[600],
               fontSize: 13,
             ),
           ),
@@ -489,11 +481,11 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.grey[50],
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: const Color.fromARGB(255, 248, 245, 245)),
       ),
       child: Row(
         children: [
@@ -528,6 +520,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 14,
+                    color: Color(0xFF2D3A4B),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -536,7 +529,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
                   'Qty: $quantity',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: Colors.grey[600],
                   ),
                 ),
               ],
@@ -555,37 +548,39 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
     );
   }
 
-  Widget _buildActionButtons(String orderId, String status, String shippingStatus) {
+  Widget _buildActionButtons(String orderId, String status) {
     List<Widget> buttons = [];
 
-    if (status == 'pending') {
+    if (status == 'placed' || status == 'pending') {
       buttons.addAll([
         Expanded(
           child: ElevatedButton.icon(
             onPressed: () => _updateOrderStatus(orderId, 'processing'),
             icon: const Icon(Icons.hourglass_top, size: 18),
-            label: const Text('Process Order'),
+            label: const Text('Process'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: Colors.purple,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: ElevatedButton.icon(
+          child: OutlinedButton.icon(
             onPressed: () => _updateOrderStatus(orderId, 'cancelled'),
             icon: const Icon(Icons.cancel, size: 18),
             label: const Text('Cancel'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
@@ -596,30 +591,32 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
       buttons.addAll([
         Expanded(
           child: ElevatedButton.icon(
-            onPressed: () => _updateShippingStatus(orderId, 'shipped'),
+            onPressed: () => _updateOrderStatus(orderId, 'shipped'),
             icon: const Icon(Icons.local_shipping, size: 18),
             label: const Text('Mark Shipped'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
+              backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: ElevatedButton.icon(
+          child: OutlinedButton.icon(
             onPressed: () => _updateOrderStatus(orderId, 'cancelled'),
             icon: const Icon(Icons.cancel, size: 18),
             label: const Text('Cancel'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
@@ -639,13 +636,36 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              padding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
       ]);
     }
 
-    if (status == 'completed' || status == 'cancelled') {
+    // Add delete button for cancelled orders
+    // Add delete button for cancelled orders
+if (status == 'cancelled') {
+  buttons.addAll([
+    Expanded(
+      child: OutlinedButton.icon(
+        onPressed: () => _deleteOrder(orderId),
+        icon: const Icon(Icons.delete_outline, size: 18),
+        label: const Text('Delete Order'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.red,
+          side: const BorderSide(color: Colors.red),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+        ),
+      ),
+    ),
+  ]);
+}
+
+    if (status == 'completed' || status == 'cancelled' && buttons.isEmpty) {
       return const SizedBox();
     }
 
@@ -663,9 +683,10 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
     try {
       await _firestore.collection('orders').doc(orderId).update({
         'status': status,
+        'orderStatus': status,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -674,6 +695,7 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
             duration: const Duration(seconds: 2),
           ),
         );
+        setState(() {});
       }
     } catch (e) {
       if (mounted) {
@@ -687,31 +709,47 @@ class _VendorOrdersScreenState extends State<VendorOrdersScreen> {
     }
   }
 
-  Future<void> _updateShippingStatus(String orderId, String status) async {
-    try {
-      await _firestore.collection('orders').doc(orderId).update({
-        'shippingStatus': status,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Shipping status updated to $status'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
+  Future<void> _deleteOrder(String orderId) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Order'),
+        content: const Text(
+            'Are you sure you want to delete this order? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating shipping: $e'),
-            backgroundColor: Colors.red,
+          TextButton(
+            onPressed: () async {
+              try {
+                await _firestore.collection('orders').doc(orderId).delete();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Order deleted successfully'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                setState(() {});
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error deleting order: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
-        );
-      }
-    }
+        ],
+      ),
+    );
   }
 }

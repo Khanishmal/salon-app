@@ -1,3 +1,4 @@
+#pubspec.yaml
 name: salon_management_app
 description: "AI-Powered Salon Management System"
 publish_to: 'none'
@@ -23,9 +24,14 @@ dependencies:
   smooth_page_indicator: ^1.1.0
   flutter_rating_bar: ^4.0.1
   cached_network_image: ^3.3.1
+  # REMOVE: gallery_saver: ^2.3.2
+  # ADD:
+  share_plus: ^7.2.1
+  augen: ^1.2.0
   
   # Maps & Location
-  google_maps_flutter: ^2.5.3
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
   geolocator: ^9.0.2
   geocoding: ^2.1.1
   
@@ -36,6 +42,7 @@ dependencies:
   firebase_storage: ^13.0.6
   firebase_messaging: ^16.1.1
   fl_chart: ^1.1.1
+  image: ^4.1.4
   
   # AR & Camera
   camera: ^0.10.5
@@ -43,7 +50,7 @@ dependencies:
   permission_handler: ^11.3.1
   image_picker: ^1.0.4
   vector_math: ^2.1.4
-  
+
   # State Management
   provider: ^6.1.1
   
@@ -54,9 +61,9 @@ dependencies:
   uuid: ^4.4.0
   url_launcher: ^6.2.2
   http: ^1.2.1
-  image: ^4.1.4
+  flutter_dotenv: ^5.1.0  # For secure API key management
   google_generative_ai: ^0.4.0
-
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -64,8 +71,64 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
+ 
   assets:
     - assets/logo_icon.png
-    - assets/hero-salon.jpg
-    - assets/bridal_nath.png
+    - assets/assets/hero-salon.jpg
+    - assets/assets/service-bridal.jpg
+    - assets/assets/hero-banner.jpg
+    - assets/assets/service-manipedi.jpg
+    - assets/assets/promo-bridal.jpg
+    - assets/assets/products-hero.jpg
+    - assets/assets/promo-summer.jpg
+    - assets/services/haircolor.jpg
+    - assets/salon-1.jpg
+    - assets/services/facial.png
+    - assets/services/manicure.png
+    - assets/services/grooming.png
+    - assets/services/makeup.png
+    - assets/services/bridal.png
+    - assets/services/hair_styling.png
+
+    - assets/makeup_icons/lipstick.png
+    - assets/makeup_icons/eyeshadow.png
+    - assets/makeup_icons/blush.png
+    - assets/makeup_icons/bronzer.png
+    - assets/makeup_icons/highlighter.png
+    - assets/makeup_icons/eyeliner.png
+    - assets/makeup_icons/foundation.png
+    - assets/makeup_icons/eyebrow.png
+
+    - assets/makeup_icons/jewellery.png
+    - assets/makeup_icons/hair_accessories.png
+    - assets/makeup_icons/mehndi.png
+    - assets/makeup_icons/makeup_deals.png
+    - assets/makeup_icons/default.png
+
+
+
+
+        # Add Mehndi assets
+    - assets/mehndi/arabic_leaves.jpeg
+    - assets/mehndi/mandala_flower.jpeg
+    - assets/mehndi/bridal.jpeg
+    - assets/mehndi/geometric_lines.jpeg
+
+    - assets/bridal/royal_red.jfif
+    - assets/bridal/rose_gold.png
+    - assets/bridal/pearl_glow.jfif
+    - assets/bridal/maharanee.png
+
+    - assets/neck1.png
+    - assets/neck2.png
+    - assets/neck3.png
+    - assets/neck4.png
+    - assets/neck5.png
+    - assets/neck6.png
+    - assets/neck7.png
+    - assets/neck8.png
+    - assets/ear5.png
+    - assets/ear6.png
+    - assets/ear7.png
+    - assets/ear9.png
+   

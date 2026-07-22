@@ -63,39 +63,46 @@ class _BookingCalendarScreenState extends State<BookingCalendarScreen> {
     }
   }
 
-  Future<void> _loadServices() async {
-    try {
-      QuerySnapshot snapshot = await _firestore
-          .collection('services')
-          .where('isActive', isEqualTo: true)
-          .get();
-      
-      setState(() {
-        _services = snapshot.docs.map((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          return {
-            'id': doc.id,
-            'name': data['name'] ?? 'Service',
-            'price': data['price'] ?? 0,
-            'duration': data['duration'] ?? 60,
-            'category': data['category'] ?? '',
-            'description': data['description'] ?? '',
-          };
-        }).toList();
-      });
-    } catch (e) {
-      print('Error loading services: $e');
-    }
+  // Replace the _loadServices method in booking_calendar.dart with this:
+
+Future<void> _loadServices() async {
+  try {
+    // FIXED: Query from 'services' collection, not 'service_bookings'
+    QuerySnapshot snapshot = await _firestore
+        .collection('services')
+        .where('isActive', isEqualTo: true)
+        .get();
+    
+    setState(() {
+      _services = snapshot.docs.map((doc) {
+        var data = doc.data() as Map<String, dynamic>;
+        return {
+          'id': doc.id,
+          'name': data['name'] ?? 'Service',
+          'price': data['price'] ?? 0,
+          'duration': data['duration'] ?? 60,
+          'category': data['category'] ?? '',
+          'description': data['description'] ?? '',
+        };
+      }).toList();
+    });
+  } catch (e) {
+    print('Error loading services: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error loading services: ${e.toString()}')),
+    );
   }
+}
 
   Future<void> _loadCustomerBookings() async {
     if (user == null) return;
     try {
       QuerySnapshot snapshot = await _firestore
-          .collection('service_bookings')
-          .where('customerId', isEqualTo: user!.uid)
-          .orderBy('createdAt', descending: true)
-          .get();
+    .collection('service_bookings')
+    .where('customerId', isEqualTo: user!.uid)
+    // Remove this line to avoid index requirement:
+    // .orderBy('createdAt', descending: true)
+    .get();
       
       print('Bookings found: ${snapshot.docs.length}'); // Debug log
       

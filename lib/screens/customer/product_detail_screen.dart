@@ -1,4 +1,3 @@
-// lib/screens/customer/product_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'vendor_chat_screen.dart';
 import 'cart_screen.dart';
+import '../../utils/product_image_helper.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String productId;
@@ -70,13 +70,18 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       final cartRef = _firestore.collection('carts').doc(user?.uid);
       final doc = await cartRef.get();
       
+      // Get proper image
+      String imageUrl = ProductImageHelper.getProductImage(_productData!);
+      
       final Map<String, dynamic> item = {
         'productId': widget.productId,
         'name': _productData!['name'],
         'price': _productData!['price'],
-        'imageUrl': _productData!['imageUrl'] ?? '',
+        'imageUrl': imageUrl,
         'vendorId': widget.vendorId,
         'quantity': _quantity,
+        'isDeal': _productData!['isDeal'] ?? false,
+        'dealPrice': _productData!['dealPrice'],
       };
       
       if (doc.exists) {
@@ -143,14 +148,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     String name = _productData!['name'] ?? 'Product';
     double price = (_productData!['price'] ?? 0).toDouble();
-    String imageUrl = _productData!['imageUrl'] ?? '';
-    String description = _productData!['description'] ?? '';
-    String category = _productData!['category'] ?? '';
-    String brand = _productData!['brand'] ?? '';
     int stock = _productData!['stock'] ?? 0;
+    String description = _productData!['description'] ?? '';
+    String category = _productData!['category'] ?? 'Other';
+    String brand = _productData!['brand'] ?? '';
     String vendorName = _vendorData?['businessName'] ?? _vendorData?['name'] ?? 'Vendor';
     String vendorId = widget.vendorId;
     double vendorRating = (_vendorData?['rating'] ?? 0).toDouble();
+    bool isDeal = _productData!['isDeal'] ?? false;
+    double? dealPrice = _productData!['dealPrice'] as double?;
+    double? discount = _productData!['discount'] as double?;
+    
+    // Get proper image
+    String imageUrl = ProductImageHelper.getProductImage(_productData!);
 
     return Scaffold(
       appBar: AppBar(
@@ -183,8 +193,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               width: double.infinity,
               color: const Color(0xFFFDEEE9),
               child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
+                  ? Image(
+                      image: imageUrl.startsWith('http')
+                          ? NetworkImage(imageUrl)
+                          : AssetImage(imageUrl) as ImageProvider,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => const Center(
                         child: Icon(Icons.image, size: 60, color: Colors.grey),
@@ -213,14 +225,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                         ),
                       ),
-                      Text(
-                        'Rs. ${NumberFormat('#,###').format(price)}',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFF2845C),
+                      if (isDeal) ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Rs. ${NumberFormat('#,###').format(dealPrice ?? price)}',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFF2845C),
+                              ),
+                            ),
+                            Text(
+                              'Rs. ${NumberFormat('#,###').format(price)}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[400],
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                            if (discount != null && discount! > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green[100],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${discount!.toInt()}% OFF',
+                                  style: TextStyle(
+                                    color: Colors.green[700],
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
+                      ] else ...[
+                        Text(
+                          'Rs. ${NumberFormat('#,###').format(price)}',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFF2845C),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -267,6 +319,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                         ),
                       ),
+                      if (isDeal)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFF6B6B), Color(0xFFFF4757)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.local_offer, color: Colors.white, size: 12),
+                              SizedBox(width: 4),
+                              Text(
+                                'DEAL',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -340,7 +417,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Description
+                  // Description (Optional)
                   if (description.isNotEmpty) ...[
                     const Text(
                       'Description',
@@ -358,8 +435,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         height: 1.5,
                       ),
                     ),
+                    const SizedBox(height: 16),
                   ],
-                  const SizedBox(height: 16),
                   
                   // Quantity Selector
                   Row(
@@ -429,7 +506,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                       child: Text(
                         stock > 0 
-                            ? 'Add to Cart - Rs. ${NumberFormat('#,###').format(price * _quantity)}'
+                            ? 'Add to Cart - Rs. ${NumberFormat('#,###').format((isDeal ? (dealPrice ?? price) : price) * _quantity)}'
                             : 'Out of Stock',
                         style: const TextStyle(
                           fontSize: 16,

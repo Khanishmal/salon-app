@@ -1,4 +1,3 @@
-// lib/screens/vendor/vendor_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,7 +10,6 @@ import 'profile_screen.dart';
 import 'products_screen.dart';
 import 'orders_screen.dart';
 import 'vendor_chat_list_screen.dart';
-import 'chat_screen.dart';
 import 'announcements_screen.dart';
 import 'vendor_statistics_screen.dart';
 import 'working_hours_screen.dart';
@@ -35,12 +33,15 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
   String _businessName = '';
   bool _isLoading = true;
   bool _isDarkMode = false;
-  Map<String, dynamic> _stats = {};
+  int _unreadChatCount = 0;
+  int _unreadAnnouncements = 0;
 
   @override
   void initState() {
     super.initState();
     _loadVendorData();
+    _loadUnreadChatCount();
+    _loadUnreadAnnouncements();
   }
 
   Future<void> _loadVendorData() async {
@@ -59,6 +60,65 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       print('Error loading vendor data: $e');
+    }
+  }
+
+  Future<void> _loadUnreadChatCount() async {
+    if (user == null) return;
+
+    try {
+      QuerySnapshot chatSnapshot = await _firestore
+          .collection('chat_messages')
+          .where('participants', arrayContains: user!.uid)
+          .get();
+
+      int unreadCount = 0;
+      for (var doc in chatSnapshot.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+        bool isRead = data['read'] ?? true;
+        bool isAdminMessage = data['isAdminMessage'] ?? false;
+        
+        if (!isRead && !isAdminMessage) {
+          unreadCount++;
+        }
+      }
+
+      setState(() {
+        _unreadChatCount = unreadCount;
+      });
+    } catch (e) {
+      setState(() {
+        _unreadChatCount = 0;
+      });
+    }
+  }
+
+  Future<void> _loadUnreadAnnouncements() async {
+    if (user == null) return;
+
+    try {
+      QuerySnapshot announcementSnapshot = await _firestore
+          .collection('announcements')
+          .where('readBy', arrayContains: user!.uid)
+          .get();
+
+      // Count unread announcements
+      int unreadCount = 0;
+      for (var doc in announcementSnapshot.docs) {
+        var data = doc.data() as Map<String, dynamic>;
+        List readBy = data['readBy'] ?? [];
+        if (!readBy.contains(user!.uid)) {
+          unreadCount++;
+        }
+      }
+
+      setState(() {
+        _unreadAnnouncements = unreadCount;
+      });
+    } catch (e) {
+      setState(() {
+        _unreadAnnouncements = 0;
+      });
     }
   }
 
@@ -129,21 +189,26 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             style: TextStyle(
               color: _isDarkMode ? Colors.white : const Color(0xFF2D3A4B),
               fontWeight: FontWeight.bold,
-              fontSize: 20,
+              fontSize: 18,
             ),
           ),
           backgroundColor: _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
-          elevation: 2,
+          elevation: 0,
           centerTitle: true,
           leading: const SizedBox(),
           actions: [
             // Theme Toggle
-            Tooltip(
-              message: _isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            Container(
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(
+                color: _isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: IconButton(
                 icon: Icon(
                   _isDarkMode ? Icons.light_mode : Icons.dark_mode,
                   color: const Color(0xFFF2845C),
+                  size: 20,
                 ),
                 onPressed: () {
                   setState(() {
@@ -153,41 +218,118 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               ),
             ),
            
-            // Product Chats Button
-            Tooltip(
-              message: 'Product Chats',
-              child: IconButton(
-                icon: const Icon(Icons.chat, color: Color(0xFFF2845C)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const VendorChatListScreen(),
+            // Announcements Button with Badge
+            Container(
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(
+                color: _isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: Color(0xFFF2845C), size: 20),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const VendorAnnouncementsScreen(),
+                        ),
+                      ).then((_) {
+                        _loadUnreadAnnouncements();
+                      });
+                    },
+                  ),
+                  if (_unreadAnnouncements > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 14,
+                          minHeight: 14,
+                        ),
+                        child: Center(
+                          child: Text(
+                            _unreadAnnouncements > 9 ? '9+' : _unreadAnnouncements.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 7,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  );
-                },
+                ],
               ),
             ),
-            // Announcements Button
-            Tooltip(
-              message: 'Announcements',
-              child: IconButton(
-                icon: const Icon(Icons.notifications_outlined, color: Color(0xFFF2845C)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const VendorAnnouncementsScreen(),
+
+            // Product Chats Button with Unread Badge
+            Container(
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(
+                color: _isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chat, color: Color(0xFFF2845C), size: 20),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const VendorChatListScreen(),
+                        ),
+                      ).then((_) {
+                        _loadUnreadChatCount();
+                      });
+                    },
+                  ),
+                  if (_unreadChatCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 14,
+                          minHeight: 14,
+                        ),
+                        child: Center(
+                          child: Text(
+                            _unreadChatCount > 9 ? '9+' : _unreadChatCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 7,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  );
-                },
+                ],
               ),
             ),
             // Profile Button
-            Tooltip(
-              message: 'Profile',
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: _isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: IconButton(
-                icon: const Icon(Icons.person_outline, color: Color(0xFFF2845C)),
+                icon: const Icon(Icons.person_outline, color: Color(0xFFF2845C), size: 20),
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -198,14 +340,6 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 },
               ),
             ),
-            // Logout Button
-            Tooltip(
-              message: 'Logout',
-              child: IconButton(
-                icon: const Icon(Icons.logout, color: Colors.red),
-                onPressed: _logout,
-              ),
-            ),
           ],
         ),
         body: _isLoading
@@ -214,21 +348,30 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   color: const Color(0xFFF2845C),
                 ),
               )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildWelcomeCard(),
-                    const SizedBox(height: 20),
-                    _buildStatsGrid(),
-                    const SizedBox(height: 20),
-                    _buildQuickActionsGrid(),
-                    const SizedBox(height: 20),
-                    _buildRecentOrders(),
-                    const SizedBox(height: 20),
-                    _buildLowStockAlert(),
-                  ],
+            : RefreshIndicator(
+                onRefresh: () async {
+                  await _loadUnreadChatCount();
+                  await _loadUnreadAnnouncements();
+                  setState(() {});
+                },
+                color: const Color(0xFFF2845C),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildWelcomeCard(),
+                      const SizedBox(height: 20),
+                      _buildStatsGrid(),
+                      const SizedBox(height: 20),
+                      _buildQuickActionsGrid(),
+                      const SizedBox(height: 20),
+                      _buildRecentOrders(),
+                      const SizedBox(height: 20),
+                      _buildLowStockAlert(),
+                    ],
+                  ),
                 ),
               ),
       ),
@@ -260,13 +403,13 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
           Row(
             children: [
               CircleAvatar(
-                radius: 25,
+                radius: 28,
                 backgroundColor: Colors.white.withOpacity(0.3),
                 child: Text(
                   _vendorName.isNotEmpty ? _vendorName[0].toUpperCase() : 'V',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 22,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -280,7 +423,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                       "Welcome, $_vendorName! 👋",
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -289,7 +432,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                         _businessName,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.8),
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                   ],
@@ -311,7 +454,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 const SizedBox(width: 4),
                 const Text(
                   "Premium Vendor",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ],
             ),
@@ -344,7 +487,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               for (var doc in orderSnapshot.data!.docs) {
                 var data = doc.data() as Map<String, dynamic>;
                 totalRevenue += (data['amount'] ?? 0).toDouble();
-                if (data['status'] == 'pending') {
+                if (data['status'] == 'pending' || data['status'] == 'placed') {
                   pendingOrders++;
                 }
               }
@@ -356,34 +499,67 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
+              childAspectRatio: 1.4,
               children: [
                 _buildStatCard(
                   'Total Products',
                   productCount.toString(),
-                  Icons.inventory,
+                  Icons.inventory_2_outlined,
                   Colors.blue,
                   _isDarkMode,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const VendorProductsScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildStatCard(
                   'Total Orders',
                   totalOrders.toString(),
-                  Icons.shopping_cart,
+                  Icons.shopping_cart_outlined,
                   Colors.green,
                   _isDarkMode,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const VendorOrdersScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildStatCard(
                   'Revenue',
-                  'Rs.${NumberFormat('#,###').format(totalRevenue)}',
+                  'Rs.${_formatNumber(totalRevenue)}',
                   Icons.trending_up,
                   const Color(0xFFF2845C),
                   _isDarkMode,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const VendorStatisticsScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _buildStatCard(
                   'Pending Orders',
                   pendingOrders.toString(),
-                  Icons.pending,
+                  Icons.pending_actions,
                   Colors.orange,
                   _isDarkMode,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const VendorOrdersScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             );
@@ -393,49 +569,65 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(isDark ? 0.2 : 0.08),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isDark, VoidCallback? onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(isDark ? 0.2 : 0.06),
+              spreadRadius: 1,
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF2D3A4B),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 18),
             ),
-          ),
-          Text(
-            title,
-            style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey.shade600, fontSize: 12),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : const Color(0xFF2D3A4B),
+              ),
+            ),
+            Text(
+              title,
+              style: TextStyle(
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _formatNumber(double number) {
+    if (number >= 100000) {
+      return '${(number / 100000).toStringAsFixed(1)}L';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}K';
+    }
+    return NumberFormat('#,###').format(number);
   }
 
   Widget _buildQuickActionsGrid() {
@@ -448,6 +640,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
       {'icon': Icons.event_busy, 'label': 'Unavailable', 'color': Colors.red},
       {'icon': Icons.settings, 'label': 'Settings', 'color': Colors.grey},
       {'icon': Icons.chat, 'label': 'Chats', 'color': Colors.teal},
+      {'icon': Icons.notifications, 'label': 'Announcements', 'color': Colors.pink},
     ];
 
     return GridView.builder(
@@ -531,7 +724,19 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   MaterialPageRoute(
                     builder: (context) => const VendorChatListScreen(),
                   ),
-                );
+                ).then((_) {
+                  _loadUnreadChatCount();
+                });
+                break;
+              case 'Announcements':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const VendorAnnouncementsScreen(),
+                  ),
+                ).then((_) {
+                  _loadUnreadAnnouncements();
+                });
                 break;
             }
           },
@@ -571,16 +776,16 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 24),
+              child: Icon(icon, color: color, size: 22),
             ),
             const SizedBox(height: 6),
             Text(
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w500,
-                color: isDark ? Colors.grey[400] : Colors.grey.shade700,
+                color: isDark ? Colors.grey[400] : Colors.grey[700],
               ),
             ),
           ],
@@ -589,17 +794,144 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
     );
   }
 
-  Widget _buildRecentOrders() {
-    return Column(
+  // Replace the _buildOrderItem method with this:
+
+Widget _buildOrderItem({
+  required String id,
+  required String customer,
+  required double amount,  // Changed to double
+  required String status,
+  Timestamp? date,
+}) {
+  Color statusColor;
+  String statusLabel;
+  
+  switch (status) {
+    case 'delivered':
+      statusColor = Colors.green;
+      statusLabel = 'Delivered';
+      break;
+    case 'shipped':
+      statusColor = Colors.blue;
+      statusLabel = 'Shipped';
+      break;
+    case 'processing':
+      statusColor = Colors.orange;
+      statusLabel = 'Processing';
+      break;
+    case 'cancelled':
+      statusColor = Colors.red;
+      statusLabel = 'Cancelled';
+      break;
+    default:
+      statusColor = Colors.grey;
+      statusLabel = 'Pending';
+  }
+
+  return Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: _isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFF8F9FA),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: _isDarkMode ? Colors.grey[800]! : Colors.grey[200]!),
+    ),
+    child: Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            status == 'delivered' ? Icons.check_circle : Icons.pending,
+            color: statusColor,
+            size: 18,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                customer,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: _isDarkMode ? Colors.white : const Color(0xFF2D3A4B),
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                'Order #${id.substring(0, 8)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              'Rs.${NumberFormat('#,###').format(amount)}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFF2845C),
+                fontSize: 14,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: statusColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+// And update the _buildRecentOrders method where amount is passed:
+
+Widget _buildRecentOrders() {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.grey.withOpacity(_isDarkMode ? 0.2 : 0.06),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Customer Orders',
+              'Recent Orders',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: _isDarkMode ? Colors.white : const Color(0xFF2D3A4B),
               ),
@@ -613,7 +945,12 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                   ),
                 );
               },
-              child: const Text('View All'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFF2845C),
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+              ),
+              child: const Text('View All', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -627,16 +964,17 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
             }
 
             if (snapshot.hasError) {
               return Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
                 child: const Center(
                   child: Text('Error loading orders'),
                 ),
@@ -646,12 +984,18 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text('No customer orders yet'),
+                child: Column(
+                  children: [
+                    Icon(Icons.shopping_cart_outlined, size: 40, color: Colors.grey[300]),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No customer orders yet',
+                      style: TextStyle(
+                        color: _isDarkMode ? Colors.grey[400] : Colors.grey[500],
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
               );
             }
@@ -659,10 +1003,18 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             return Column(
               children: snapshot.data!.docs.map((doc) {
                 var data = doc.data() as Map<String, dynamic>;
+                // FIXED: Ensure amount is converted to double
+                double amount = 0.0;
+                if (data['total'] != null) {
+                  amount = (data['total'] as num).toDouble();
+                } else if (data['amount'] != null) {
+                  amount = (data['amount'] as num).toDouble();
+                }
+                
                 return _buildOrderItem(
                   id: doc.id,
                   customer: data['customerName'] ?? 'Customer',
-                  amount: data['total'] ?? data['amount'] ?? 0,
+                  amount: amount,
                   status: data['orderStatus'] ?? data['status'] ?? 'pending',
                   date: data['createdAt'] as Timestamp?,
                 );
@@ -671,116 +1023,9 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
           },
         ),
       ],
-    );
-  }
-
-  Widget _buildOrderItem({
-    required String id,
-    required String customer,
-    required double amount,
-    required String status,
-    Timestamp? date,
-  }) {
-    Color statusColor;
-    String statusLabel;
-    
-    switch (status) {
-      case 'delivered':
-        statusColor = Colors.green;
-        statusLabel = 'Delivered';
-        break;
-      case 'shipped':
-        statusColor = Colors.blue;
-        statusLabel = 'Shipped';
-        break;
-      case 'processing':
-        statusColor = Colors.orange;
-        statusLabel = 'Processing';
-        break;
-      case 'cancelled':
-        statusColor = Colors.red;
-        statusLabel = 'Cancelled';
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusLabel = 'Pending';
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _isDarkMode ? Colors.grey[800]! : Colors.grey.shade100),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              status == 'delivered' ? Icons.check_circle : Icons.pending,
-              color: statusColor,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  customer,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: _isDarkMode ? Colors.white : const Color(0xFF2D3A4B),
-                  ),
-                ),
-                Text(
-                  'Order #${id.substring(0, 8)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: _isDarkMode ? Colors.grey[400] : Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'Rs.${NumberFormat('#,###').format(amount)}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFF2845C),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: statusColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildLowStockAlert() {
     return StreamBuilder<QuerySnapshot>(
@@ -799,7 +1044,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
         }
 
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
@@ -808,7 +1053,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
           child: Row(
             children: [
               const Icon(Icons.warning_amber, color: Colors.orange),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -818,11 +1063,15 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.orange,
+                        fontSize: 13,
                       ),
                     ),
                     Text(
                       '${snapshot.data!.docs.length} products are running low on stock',
-                      style: TextStyle(color: Colors.orange.shade700),
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -836,7 +1085,12 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                     ),
                   );
                 },
-                child: const Text('View Products'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFF2845C),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                ),
+                child: const Text('View Products', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),

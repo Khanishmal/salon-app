@@ -1,4 +1,4 @@
-//lib/painters/makeup_painter.dart
+// lib/painters/makeup_painter.dart
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -9,26 +9,24 @@ class MakeupPainter extends CustomPainter {
   final List<Face> faces;
   final MakeupConfiguration config;
   final Size absoluteImageSize;
-  final int rotation;
-
-  final ui.Image? nathImage;
-  final ui.Image? teekaImage;
-  final ui.Image? mehndiImage;
+  final double compareSliderX;
+  final bool isCompareMode;
+  final bool isCapturing;
 
   MakeupPainter({
     required this.faces,
     required this.config,
     required this.absoluteImageSize,
-    required this.rotation,
-    this.nathImage,
-    this.teekaImage,
-    this.mehndiImage,
+    required this.compareSliderX,
+    required this.isCompareMode,
+    this.isCapturing = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (faces.isEmpty) return;
+
     for (final Face face in faces) {
-      // Scale conversions between raw image frame buffers and screen display canvas
       final double scaleX = size.width / absoluteImageSize.height;
       final double scaleY = size.height / absoluteImageSize.width;
 
@@ -36,106 +34,162 @@ class MakeupPainter extends CustomPainter {
         return Offset(size.width - (point.x * scaleX), point.y * scaleY);
       }
 
-      // Read highly stable bounding box metrics
       final boundingBox = face.boundingBox;
       final double leftBox = size.width - (boundingBox.right * scaleX);
       final double widthBox = boundingBox.width * scaleX;
       final double topBox = boundingBox.top * scaleY;
       final double heightBox = boundingBox.height * scaleY;
 
-      // Extract specific semantic paths unlocked by step 1
-      final upperLip = face.contours[FaceContourType.upperLipTop];
-      final lowerLip = face.contours[FaceContourType.lowerLipBottom];
+      // Extract contours
+      final faceContour = face.contours[FaceContourType.face];
+      final upperLipTop = face.contours[FaceContourType.upperLipTop];
+      final upperLipBottom = face.contours[FaceContourType.upperLipBottom];
+      final lowerLipTop = face.contours[FaceContourType.lowerLipTop];
+      final lowerLipBottom = face.contours[FaceContourType.lowerLipBottom];
       final leftEye = face.contours[FaceContourType.leftEye];
       final rightEye = face.contours[FaceContourType.rightEye];
-      final noseBridge = face.contours[FaceContourType.noseBridge];
+      final leftEyebrow = face.contours[FaceContourType.leftEyebrowTop];
+      final rightEyebrow = face.contours[FaceContourType.rightEyebrowTop];
+
+      canvas.save();
+
+      // Split mode clipping
+      if (isCompareMode && !isCapturing) {
+        final double splitX = size.width * compareSliderX;
+        canvas.clipRect(Rect.fromLTWH(splitX, 0, size.width - splitX, size.height));
+      }
+
+      // Apply intensity multiplier
+      final intensity = config.intensity;
 
       // ==========================================
-      // 1. LIPSTICK LAYER
+      // 1. BRONZER - Warmth & Definition (Multiply Blend)
       // ==========================================
-      if (upperLip != null && lowerLip != null && config.lipstickColor != Colors.transparent) {
-        final Path lipPath = Path();
-        final List<Offset> points = [...upperLip.points, ...lowerLip.points.reversed].map(transformPoint).toList();
-        if (points.isNotEmpty) {
-          lipPath.moveTo(points.first.dx, points.first.dy);
-          for (var p in points) {
-            lipPath.lineTo(p.dx, p.dy);
-          }
-          lipPath.close();
-          canvas.drawPath(lipPath, Paint()
-            ..color = config.lipstickColor.withOpacity(config.lipstickOpacity)
-            ..blendMode = BlendMode.colorBurn
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
+      if (faceContour != null && config.bronzerColor != Colors.transparent) {
+        final Path facePath = _createContourPath(faceContour, transformPoint);
+        canvas.drawPath(
+          facePath,
+          Paint()
+            ..color = config.bronzerColor.withOpacity(config.bronzerOpacity * intensity)
+            ..blendMode = BlendMode.multiply
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 25.0),
+        );
+      }
+
+      // ==========================================
+      // 2. FOUNDATION - Base Coverage (Soft Light Blend)
+      // ==========================================
+      if (faceContour != null && config.foundationColor != Colors.transparent) {
+        final Path facePath = _createContourPath(faceContour, transformPoint);
+        canvas.drawPath(
+          facePath,
+          Paint()
+            ..color = config.foundationColor.withOpacity(config.foundationOpacity * intensity)
+            ..blendMode = BlendMode.softLight
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20.0),
+        );
+      }
+
+      // ==========================================
+      // 3. HIGHLIGHTER - Glow Points
+      // ==========================================
+      if (config.highlighterColor != Colors.transparent) {
+        final Paint highlighterPaint = Paint()
+          ..color = config.highlighterColor.withOpacity(config.highlighterOpacity * intensity)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15.0);
+
+        final leftCheekHighlight = Offset(leftBox + widthBox * 0.2, topBox + heightBox * 0.42);
+        final rightCheekHighlight = Offset(leftBox + widthBox * 0.8, topBox + heightBox * 0.42);
+        final radius = widthBox * 0.08;
+        
+        canvas.drawCircle(leftCheekHighlight, radius, highlighterPaint);
+        canvas.drawCircle(rightCheekHighlight, radius, highlighterPaint);
+        
+        if (faceContour != null) {
+          final noseTip = Offset(leftBox + widthBox * 0.5, topBox + heightBox * 0.5);
+          final noseHighlight = Paint()
+            ..color = config.highlighterColor.withOpacity(config.highlighterOpacity * intensity * 0.5)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+          canvas.drawCircle(noseTip, widthBox * 0.03, noseHighlight);
         }
       }
 
       // ==========================================
-      // 2. BLUSH LAYER
+      // 4. EYEBROWS - Natural Color Enhancement
       // ==========================================
-      if (config.blushColor != Colors.transparent) {
-        final leftCheek = Offset(leftBox + widthBox * 0.25, topBox + heightBox * 0.6);
-        final rightCheek = Offset(leftBox + widthBox * 0.75, topBox + heightBox * 0.6);
-        final radius = widthBox * 0.15;
-        final Paint blushPaint = Paint()..blendMode = BlendMode.multiply;
+      if (leftEyebrow != null && rightEyebrow != null && config.eyebrowColor != Colors.transparent) {
+        final Paint eyebrowPaint = Paint()
+          ..color = config.eyebrowColor.withOpacity(config.eyebrowOpacity * intensity * 0.7)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
 
-        blushPaint.shader = RadialGradient(colors: [config.blushColor.withOpacity(config.blushOpacity), Colors.transparent])
-            .createShader(Rect.fromCircle(center: leftCheek, radius: radius));
-        canvas.drawCircle(leftCheek, radius, blushPaint);
-
-        blushPaint.shader = RadialGradient(colors: [config.blushColor.withOpacity(config.blushOpacity), Colors.transparent])
-            .createShader(Rect.fromCircle(center: rightCheek, radius: radius));
-        canvas.drawCircle(rightCheek, radius, blushPaint);
+        for (var eyebrow in [leftEyebrow, rightEyebrow]) {
+          final points = eyebrow.points.map(transformPoint).toList();
+          if (points.isNotEmpty && points.length > 2) {
+            final Path fillPath = Path();
+            fillPath.moveTo(points.first.dx, points.first.dy - 3);
+            for (var p in points) {
+              fillPath.lineTo(p.dx, p.dy - 3);
+            }
+            for (var p in points.reversed) {
+              fillPath.lineTo(p.dx, p.dy + 3);
+            }
+            fillPath.close();
+            canvas.drawPath(fillPath, eyebrowPaint);
+          }
+        }
       }
 
       // ==========================================
-      // 3. EYESHADOW LAYER
+      // 5. EYESHADOW - Rich Color Application
       // ==========================================
       if (leftEye != null && rightEye != null && config.eyeshadowColor != Colors.transparent) {
         final Paint shadowPaint = Paint()
-          ..color = config.eyeshadowColor.withOpacity(config.eyeshadowOpacity)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5);
+          ..color = config.eyeshadowColor.withOpacity(config.eyeshadowOpacity * intensity)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15.0);
 
         for (var eyeContour in [leftEye, rightEye]) {
-          final Path shadowPath = Path();
           final points = eyeContour.points.map(transformPoint).toList();
           if (points.isNotEmpty) {
             final halfLength = (points.length / 2).floor();
             final topLidPoints = points.sublist(0, halfLength);
             
-            shadowPath.moveTo(topLidPoints.first.dx, topLidPoints.first.dy - 2);
-            for (var p in topLidPoints) {
-              shadowPath.lineTo(p.dx, p.dy - 8); 
+            if (topLidPoints.isNotEmpty) {
+              final Path shadowPath = Path();
+              shadowPath.moveTo(topLidPoints.first.dx, topLidPoints.first.dy - 2);
+              for (var p in topLidPoints) {
+                shadowPath.lineTo(p.dx, p.dy - 25);
+              }
+              for (var p in topLidPoints.reversed) {
+                shadowPath.lineTo(p.dx, p.dy);
+              }
+              shadowPath.close();
+              canvas.drawPath(shadowPath, shadowPaint);
             }
-            for (var p in topLidPoints.reversed) {
-              shadowPath.lineTo(p.dx, p.dy);
-            }
-            shadowPath.close();
-            canvas.drawPath(shadowPath, shadowPaint);
           }
         }
       }
 
       // ==========================================
-      // 4. EYELINER LAYER
+      // 6. EYELINER - Precise Liner
       // ==========================================
       if (leftEye != null && rightEye != null && config.eyelinerColor != Colors.transparent) {
         final Paint linerPaint = Paint()
-          ..color = config.eyelinerColor.withOpacity(config.eyelinerOpacity)
+          ..color = config.eyelinerColor.withOpacity(config.eyelinerOpacity * intensity)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0
+          ..strokeWidth = 2.5
           ..strokeCap = StrokeCap.round;
 
         for (var eyeContour in [leftEye, rightEye]) {
           final points = eyeContour.points.map(transformPoint).toList();
           if (points.isNotEmpty) {
             final halfLength = (points.length / 2).floor();
-            final topLidPoints = points.sublist(0, halfLength);
+            final topPoints = points.sublist(0, halfLength);
             
-            if (topLidPoints.length > 1) {
+            if (topPoints.length > 2) {
               final Path linerPath = Path();
-              linerPath.moveTo(topLidPoints.first.dx, topLidPoints.first.dy);
-              for (int i = 1; i < topLidPoints.length; i++) {
-                linerPath.lineTo(topLidPoints[i].dx, topLidPoints[i].dy);
+              linerPath.moveTo(topPoints.first.dx, topPoints.first.dy);
+              for (int i = 1; i < topPoints.length; i++) {
+                linerPath.lineTo(topPoints[i].dx, topPoints[i].dy);
               }
               canvas.drawPath(linerPath, linerPaint);
             }
@@ -144,107 +198,126 @@ class MakeupPainter extends CustomPainter {
       }
 
       // ==========================================
-      // 5. CONTOUR LAYER
+      // 7. BLUSH - Soft Gradient Application
       // ==========================================
-      if (config.contourColor != Colors.transparent) {
-        final Paint contourPaint = Paint()..blendMode = BlendMode.darken;
-        final leftHollow = Offset(leftBox + widthBox * 0.15, topBox + heightBox * 0.68);
-        final rightHollow = Offset(leftBox + widthBox * 0.85, topBox + heightBox * 0.68);
-        final cr = widthBox * 0.14;
-
-        contourPaint.shader = RadialGradient(colors: [config.contourColor.withOpacity(config.contourOpacity), Colors.transparent])
-            .createShader(Rect.fromCircle(center: leftHollow, radius: cr));
-        canvas.drawOval(Rect.fromCenter(center: leftHollow, width: cr * 1.5, height: cr * 0.5), contourPaint);
-
-        contourPaint.shader = RadialGradient(colors: [config.contourColor.withOpacity(config.contourOpacity), Colors.transparent])
-            .createShader(Rect.fromCircle(center: rightHollow, radius: cr));
-        canvas.drawOval(Rect.fromCenter(center: rightHollow, width: cr * 1.5, height: cr * 0.5), contourPaint);
-      }
-
-      // ========================================================
-      // 6. SHORTCUT PLATFORM: JEWELRY (NATH & TEEKA IMAGE ASSETS)
-      // ========================================================
-      if (config.jewelryColor != Colors.transparent) {
-        // Find center-midline anchor using the stable top of the nose bridge
-        Offset midFaceAnchor = Offset(leftBox + widthBox * 0.5, topBox + heightBox * 0.42);
-        if (noseBridge != null && noseBridge.points.isNotEmpty) {
-          midFaceAnchor = transformPoint(noseBridge.points.first);
-        }
-
-        // A. FOREHEAD TEEKA OVERLAY SHORTCUT
-        if (teekaImage != null) {
-          double teekaW = widthBox * 0.20; 
-          double teekaH = teekaW * (teekaImage!.height / teekaImage!.width);
-
-          Rect teekaRect = Rect.fromLTWH(
-            midFaceAnchor.dx - (teekaW / 2),
-            topBox + (heightBox * 0.12), // Positions safely in upper forehead zone
-            teekaW,
-            teekaH,
-          );
-
-          canvas.drawImageRect(
-            teekaImage!,
-            Rect.fromLTWH(0, 0, teekaImage!.width.toDouble(), teekaImage!.height.toDouble()),
-            teekaRect,
-            Paint()..isAntiAlias = true..filterQuality = FilterQuality.high,
-          );
-        }
-
-        // B. BRIDAL NATH (NOSE RING) OVERLAY SHORTCUT
-        if (nathImage != null) {
-          double nathW = widthBox * 0.30;
-          double nathH = nathW * (nathImage!.height / nathImage!.width);
-
-          Rect nathRect = Rect.fromLTWH(
-            midFaceAnchor.dx - (nathW * 0.6), // Offsets automatically toward left nostril/cheek
-            midFaceAnchor.dy + (heightBox * 0.08), 
-            nathW,
-            nathH,
-          );
-
-          canvas.drawImageRect(
-            nathImage!,
-            Rect.fromLTWH(0, 0, nathImage!.width.toDouble(), nathImage!.height.toDouble()),
-            nathRect,
-            Paint()..isAntiAlias = true..filterQuality = FilterQuality.high,
-          );
-        }
-      }
-
-      // ========================================================
-      // 7. SHORTCUT PLATFORM: BRIDAL MEHNDI (IMAGE ASSET BROW STRIP)
-      // ========================================================
-      if (config.mehndiColor != Colors.transparent && mehndiImage != null) {
-        Offset midFaceAnchor = Offset(leftBox + widthBox * 0.5, topBox + heightBox * 0.42);
-        if (noseBridge != null && noseBridge.points.isNotEmpty) {
-          midFaceAnchor = transformPoint(noseBridge.points.first);
-        }
-
-        double mehndiW = widthBox * 0.65; // Arches flawlessly across full forehead width
-        double mehndiH = mehndiW * (mehndiImage!.height / mehndiImage!.width);
-
-        Rect mehndiRect = Rect.fromLTWH(
-          midFaceAnchor.dx - (mehndiW / 2),
-          midFaceAnchor.dy - mehndiH - 4, // Anchored naturally directly over eyebrows
-          mehndiW,
-          mehndiH,
+      if (config.blushColor != Colors.transparent) {
+        final leftCheek = Offset(leftBox + widthBox * 0.25, topBox + heightBox * 0.55);
+        final rightCheek = Offset(leftBox + widthBox * 0.75, topBox + heightBox * 0.55);
+        final radius = widthBox * 0.12;
+        
+        final Paint blushPaint = Paint()..blendMode = BlendMode.multiply;
+        
+        final leftGradient = RadialGradient(
+          colors: [
+            config.blushColor.withOpacity(config.blushOpacity * intensity * 0.7),
+            config.blushColor.withOpacity(config.blushOpacity * intensity * 0.2),
+            Colors.transparent,
+          ],
+          radius: 1.8,
         );
-
-        canvas.drawImageRect(
-          mehndiImage!,
-          Rect.fromLTWH(0, 0, mehndiImage!.width.toDouble(), mehndiImage!.height.toDouble()),
-          mehndiRect,
-          Paint()
-            ..isAntiAlias = true
-            ..filterQuality = FilterQuality.high
-            ..colorFilter = ColorFilter.mode(config.mehndiColor.withOpacity(config.mehndiOpacity), BlendMode.srcATop),
+        blushPaint.shader = leftGradient.createShader(
+          Rect.fromCircle(center: leftCheek, radius: radius)
         );
+        canvas.drawCircle(leftCheek, radius, blushPaint);
+        
+        final rightGradient = RadialGradient(
+          colors: [
+            config.blushColor.withOpacity(config.blushOpacity * intensity * 0.7),
+            config.blushColor.withOpacity(config.blushOpacity * intensity * 0.2),
+            Colors.transparent,
+          ],
+          radius: 1.8,
+        );
+        blushPaint.shader = rightGradient.createShader(
+          Rect.fromCircle(center: rightCheek, radius: radius)
+        );
+        canvas.drawCircle(rightCheek, radius, blushPaint);
       }
+
+      // ==========================================
+      // 8. LIPSTICK - Color Burn Blend for Natural Texture
+      // ==========================================
+      if (config.lipstickColor != Colors.transparent) {
+        final Paint lipstickPaint = Paint()
+          ..color = config.lipstickColor.withOpacity(config.lipstickOpacity * intensity)
+          ..blendMode = BlendMode.colorBurn
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
+
+        if (upperLipTop != null && upperLipBottom != null) {
+          final Path upperLipPath = _createLipPath(upperLipTop, upperLipBottom, transformPoint);
+          canvas.drawPath(upperLipPath, lipstickPaint);
+        }
+
+        if (lowerLipTop != null && lowerLipBottom != null) {
+          final Path lowerLipPath = _createLipPath(lowerLipTop, lowerLipBottom, transformPoint);
+          canvas.drawPath(lowerLipPath, lipstickPaint);
+        }
+        
+        // Lip highlight
+        if (lowerLipTop != null) {
+          final lowerPoints = lowerLipTop.points.map(transformPoint).toList();
+          if (lowerPoints.isNotEmpty) {
+            final centerX = lowerPoints.reduce((a, b) => a.dx < b.dx ? a : b).dx +
+                           (lowerPoints.reduce((a, b) => a.dx > b.dx ? a : b).dx - 
+                            lowerPoints.reduce((a, b) => a.dx < b.dx ? a : b).dx) / 2;
+            final centerY = lowerPoints.reduce((a, b) => a.dy < b.dy ? a : b).dy +
+                           (lowerPoints.reduce((a, b) => a.dy > b.dy ? a : b).dy - 
+                            lowerPoints.reduce((a, b) => a.dy < b.dy ? a : b).dy) / 2;
+            
+            final Paint highlightPaint = Paint()
+              ..color = Colors.white.withOpacity(0.15 * intensity)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+            
+            canvas.drawCircle(
+              Offset(centerX, centerY),
+              widthBox * 0.035,
+              highlightPaint,
+            );
+          }
+        }
+      }
+
+      canvas.restore();
     }
   }
 
-  @override
-  bool shouldRepaint(covariant MakeupPainter oldDelegate) => true;
-}
+  Path _createContourPath(FaceContour contour, Offset Function(Point<int>) transform) {
+    final Path path = Path();
+    final points = contour.points.map(transform).toList();
+    if (points.isNotEmpty) {
+      path.moveTo(points.first.dx, points.first.dy);
+      for (var p in points) {
+        path.lineTo(p.dx, p.dy);
+      }
+      path.close();
+    }
+    return path;
+  }
 
+  Path _createLipPath(FaceContour top, FaceContour bottom, Offset Function(Point<int>) transform) {
+    final Path path = Path();
+    final topPoints = top.points.map(transform).toList();
+    final bottomPoints = bottom.points.map(transform).toList();
+    
+    if (topPoints.isNotEmpty && bottomPoints.isNotEmpty) {
+      path.moveTo(topPoints.first.dx, topPoints.first.dy);
+      for (var p in topPoints) {
+        path.lineTo(p.dx, p.dy);
+      }
+      for (var p in bottomPoints.reversed) {
+        path.lineTo(p.dx, p.dy);
+      }
+      path.close();
+    }
+    return path;
+  }
+
+  @override
+  bool shouldRepaint(covariant MakeupPainter oldDelegate) {
+    return oldDelegate.faces != faces ||
+           oldDelegate.config != config ||
+           oldDelegate.isCompareMode != isCompareMode ||
+           oldDelegate.compareSliderX != compareSliderX ||
+           oldDelegate.isCapturing != isCapturing;
+  }
+}

@@ -1,9 +1,10 @@
-// lib/screens/customer/checkout_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'orders_screen.dart'; // Import orders screen
+import 'product_shop.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final double total;
@@ -44,6 +45,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   double _deliveryCharge = 150;
   double _subtotal = 0;
   double _totalAmount = 0;
+  bool _isPlacingOrder = false;
 
   final Map<String, dynamic> _deliveryMethods = {
     'standard': {'label': 'Standard Delivery', 'days': '3-5 days', 'charge': 150},
@@ -100,19 +102,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
 
-    // Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF2845C)),
-        ),
-      ),
-    );
+    if (_isPlacingOrder) return;
+    
+    setState(() => _isPlacingOrder = true);
 
     try {
-      // Create order
+      // Get vendor ID from first item
+      String? vendorId;
+      if (widget.items.isNotEmpty && widget.items[0]['vendorId'] != null) {
+        vendorId = widget.items[0]['vendorId'];
+      }
+
       final orderData = {
         'customerId': user?.uid,
         'customerName': _fullNameController.text.trim(),
@@ -130,8 +130,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'deliveryLabel': _deliveryMethods[_deliveryMethod]?['label'],
         'deliveryDays': _deliveryMethods[_deliveryMethod]?['days'],
         'paymentMethod': _paymentMethod,
-        'paymentStatus': _paymentMethod == 'cod' ? 'pending' : 'pending',
+        'paymentStatus': 'pending',
         'orderStatus': 'placed',
+        'vendorId': vendorId ?? '',
         'orderNotes': _orderNotes.trim(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -143,13 +144,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // Clear cart
       await _firestore.collection('carts').doc(user?.uid).delete();
 
-      // Dismiss loading
-      Navigator.pop(context);
-
       // Show success dialog
-      _showOrderSuccessDialog();
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+        _showOrderSuccessDialog();
+      }
+      
     } catch (e) {
-      Navigator.pop(context); // Dismiss loading
+      setState(() => _isPlacingOrder = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error placing order: ${e.toString()}'),
@@ -164,7 +166,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final days = _deliveryMethods[_deliveryMethod]?['days'] ?? '3-5 days';
     if (days == 'Free') return 'Store Pickup Available';
     
-    // Extract number of days from string (e.g., "3-5 days" -> 5)
     final regex = RegExp(r'(\d+)');
     final match = regex.firstMatch(days);
     if (match != null) {
@@ -199,7 +200,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Order Placed Successfully!',
+              'Order Placed!',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -242,16 +243,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Delivery:'),
-                      Text(_deliveryMethods[_deliveryMethod]?['label'] ?? 'Standard'),
+                      const Text('Status:'),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'PENDING',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Payment:'),
-                      Text(_paymentMethod.toUpperCase()),
+                      const Text('Delivery:'),
+                      Text(_deliveryMethods[_deliveryMethod]?['label'] ?? 'Standard'),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -270,10 +285,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'We\'ll notify you when your order is confirmed.',
+              'The vendor will confirm your order soon.',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey.shade600,
+                color: Colors.grey[600],
               ),
             ),
           ],
@@ -282,8 +297,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Go back to cart
-              Navigator.pop(context); // Go back to shop
+              // Navigate to Orders Screen instead of going back to cart
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const CustomerOrdersScreen()),
+                (route) => false,
+              );
+            },
+            child: const Text('View My Orders'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              // Navigate to Shop
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const ProductShopScreen()),
+                (route) => false,
+              );
             },
             child: const Text('Continue Shopping'),
           ),
@@ -595,7 +626,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _placeOrder,
+                  onPressed: _isPlacingOrder ? null : _placeOrder,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF2845C),
                     foregroundColor: Colors.white,
@@ -604,13 +635,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: Text(
-                    'Place Order - Rs. ${NumberFormat('#,###').format(_totalAmount)}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: _isPlacingOrder
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          'Place Order - Rs. ${NumberFormat('#,###').format(_totalAmount)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
               ),
             ],

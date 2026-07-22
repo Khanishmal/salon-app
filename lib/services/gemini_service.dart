@@ -9,7 +9,7 @@ class GeminiService {
   // API KEY - Working!
   // ===========================================================================
   
-  static const String _apiKey = 'GEMINI_API_KEY';
+  static const String _apiKey = 'Gemini api key';
 
   // ===========================================================================
   // CONFIRMED WORKING MODELS

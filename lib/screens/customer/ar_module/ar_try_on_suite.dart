@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
 
-import 'ar_makeup_screen.dart';
-import 'ar_jewelry_screen.dart';
+import 'bridal_makeup_screen.dart';
+import 'ar_jewelry_tryon_screen.dart';
 import 'ar_mehndi_screen.dart';
 import 'ar_ai_analysis_screen.dart';
-import 'photo_upload_screen.dart';
+import 'photo_makeup_tryon_screen.dart';
+import 'virtual_makeup_screen.dart';
 
 class ArTryOnSuiteScreen extends StatelessWidget {
   const ArTryOnSuiteScreen({super.key});
@@ -55,14 +56,14 @@ class ArTryOnSuiteScreen extends StatelessWidget {
                     title: 'Bridal Makeup',
                     icon: Icons.face_retouching_natural,
                     color: const Color(0xFF8B1A4A),
-                    screen: const ArMakeupScreen(),
+                    screen: const BridalMakeupScreen(),
                   ),
                   _buildFeatureCard(
                     context,
                     title: 'Jewelry Try-On',
                     icon: Icons.diamond,
                     color: const Color(0xFF7A5A00),
-                    screen: const ArJewelryScreen(),
+                    screen: const ArJewelryTryOnScreen(),
                   ),
                   _buildFeatureCard(
                     context,
@@ -76,7 +77,7 @@ class ArTryOnSuiteScreen extends StatelessWidget {
                     title: 'Photo Upload',
                     icon: Icons.photo_camera,
                     color: const Color(0xFF2A4A6A),
-                    screen: const PhotoUploadMakeupScreen(),
+                    screen: const PhotoMakeupTryonScreen(),
                   ),
                 ],
               ),

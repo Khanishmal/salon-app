@@ -1,19 +1,16 @@
-// lib/customer/ar_mehndi_screen.dart
+import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
-
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:animate_do/animate_do.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
-import 'ar_face_engine.dart';
+import '../../../models/mehndi_models.dart';
 
 class ArMehndiScreen extends StatefulWidget {
   const ArMehndiScreen({super.key});
@@ -23,568 +20,465 @@ class ArMehndiScreen extends StatefulWidget {
 }
 
 class _ArMehndiScreenState extends State<ArMehndiScreen>
-    with WidgetsBindingObserver {
-  final _engine = ArFaceEngine();
-  bool _cameraReady = false;
-  ArFaceData? _faceData;
-  final _previewKey = GlobalKey();
-  bool _capturing = false;
-  int _selectedPattern = 0;
-  double _intensity = 0.85;
-  bool _photoMode = false;
-  File? _uploadedImage;
-  bool _isProcessing = false;
+    with SingleTickerProviderStateMixin {
+  
+  File? _selectedImage;
+  bool _isImageLoading = false;
+  String? _selectedPatternId;
+  int _selectedTab = 0;
 
-  final List<Map<String, dynamic>> _hennaPatterns = [
-    {'name': 'Bridal Mandala', 'color': const Color(0xFF4A2C00), 'style': 'Traditional'},
-    {'name': 'Arabic Floral', 'color': const Color(0xFF6E3A07), 'style': 'Arabic'},
-    {'name': 'Pakistani', 'color': const Color(0xFF2B1900), 'style': 'Pakistani'},
-    {'name': 'Finger Design', 'color': const Color(0xFF5C2C16), 'style': 'Finger'},
-    {'name': 'Back Hand', 'color': const Color(0xFF3D1E00), 'style': 'Back Hand'},
-    {'name': 'Full Hand', 'color': const Color(0xFF1A0A00), 'style': 'Full'},
+  final ImagePicker _picker = ImagePicker();
+  final GlobalKey _repaintBoundaryKey = GlobalKey();
+
+  // 4 Mehndi Patterns with applied hand images
+  final List<String> _patternIds = [
+    'arabic_leaves',
+    'mandala_flower',
+    'bridal_full',
+    'geometric_lines',
   ];
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _start();
+    // Set default pattern
+    _selectedPatternId = _patternIds.first;
   }
 
-  Future<void> _start() async {
-    await Permission.camera.request();
-    _engine.onCameraReady = (v) => setState(() => _cameraReady = v);
-    _engine.onFace = (d) {
-      if (mounted) setState(() => _faceData = d);
-    };
-    await _engine.init();
+  Future<void> _pickImage() async {
+    setState(() => _isImageLoading = true);
+    
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+      maxWidth: 800,
+      maxHeight: 800,
+    );
+    
+    setState(() => _isImageLoading = false);
+    
+    if (image != null) {
+      setState(() {
+        _selectedImage = File(image.path);
+      });
+      _showSnackBar('Hand image uploaded! Select a mehndi design.', Colors.green);
+    }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive) _engine.stopStream();
-    if (state == AppLifecycleState.resumed) _engine.startStream();
+  void _showSnackBar(String msg, Color bg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: const TextStyle(color: Colors.white)),
+        backgroundColor: bg,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _engine.dispose();
     super.dispose();
-  }
-
-  Future<void> _capture() async {
-    if (_capturing) return;
-    setState(() => _capturing = true);
-    try {
-      await _engine.stopStream();
-      await Future.delayed(const Duration(milliseconds: 80));
-      final rb = _previewKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (rb == null) return;
-      final img = await rb.toImage(pixelRatio: 3.0);
-      final data = await img.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) return;
-      final dir = Directory('/storage/emulated/0/DCIM/SalonAR');
-      await dir.create(recursive: true);
-      final f = File('${dir.path}/mehndi_${DateTime.now().millisecondsSinceEpoch}.png');
-      await f.writeAsBytes(data.buffer.asUint8List());
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📸 Mehndi design saved!'),
-            backgroundColor: Color(0xFF4A2C00),
-          ),
-        );
-      }
-    } finally {
-      await _engine.startStream();
-      if (mounted) setState(() => _capturing = false);
-    }
-  }
-
-  Future<void> _uploadPhoto() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _uploadedImage = File(image.path);
-        _photoMode = true;
-      });
-    }
-  }
-
-  Future<void> _applyAIMehndi() async {
-    if (_uploadedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload a hand photo first'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isProcessing = true);
-
-    try {
-      final bytes = await _uploadedImage!.readAsBytes();
-      final base64Image = base64Encode(bytes);
-
-      final pattern = _hennaPatterns[_selectedPattern];
-      
-      final response = await http.post(
-        Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=YOUR_API_KEY'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'contents': [
-            {
-              'parts': [
-                {
-                  'text': '''
-Apply a beautiful mehndi design to this hand photo.
-Design style: ${pattern['style']}
-Design name: ${pattern['name']}
-Color: ${pattern['color'].toString()}
-Intensity: ${(_intensity * 100).toStringAsFixed(0)}%
-
-Make the mehndi look realistic and natural on the hand.
-'''
-                },
-                {
-                  'inline_data': {
-                    'mime_type': 'image/jpeg',
-                    'data': base64Image,
-                  }
-                }
-              ]
-            }
-          ]
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Mehndi applied successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        throw Exception('Failed to apply mehndi');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() => _isProcessing = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
+      backgroundColor: const Color(0xFF0A0A0A),
+      appBar: _buildAppBar(),
+      body: IndexedStack(
+        index: _selectedTab,
         children: [
-          if (_cameraReady) _buildCameraView() else _buildLoader(),
-          _buildControls(),
-          _buildTopBar(),
+          _buildTryOnTab(isMobile, screenHeight),
+          _buildHistoryTab(),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: Text(
+        'MEHNDI STUDIO',
+        style: GoogleFonts.poppins(
+            color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 2),
+      ),
+      backgroundColor: const Color(0xFF0A0A0A),
+      elevation: 0,
+      centerTitle: true,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: () => Navigator.pop(context),
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return BottomNavigationBar(
+      currentIndex: _selectedTab,
+      backgroundColor: const Color(0xFF0A0A0A),
+      selectedItemColor: const Color(0xFFE28766),
+      unselectedItemColor: Colors.white54,
+      elevation: 0,
+      onTap: (index) => setState(() => _selectedTab = index),
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.brush, size: 22), label: 'Try-On'),
+        BottomNavigationBarItem(icon: Icon(Icons.history, size: 22), label: 'History'),
+      ],
+    );
+  }
+
+  Widget _buildTryOnTab(bool isMobile, double screenHeight) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 10 : 16),
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image Display
+          Container(
+            height: isMobile ? screenHeight * 0.35 : 320,
+            width: double.infinity,
+            child: _buildImageDisplay(),
+          ),
+          const SizedBox(height: 10),
+          
+          // Upload Button - Only Gallery
+          _buildSourceButton(isMobile),
+          
+          const SizedBox(height: 14),
+          
+          // Pattern Selection - Fixed overflow with smaller height
+          _buildPatternSelection(isMobile),
+          
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildLoader() => Container(
-    color: const Color(0xFF0E0A14),
-    child: const Center(
-      child: CircularProgressIndicator(color: Color(0xFF8B4513)),
-    ),
-  );
-
-  Widget _buildCameraView() {
-    return RepaintBoundary(
-      key: _previewKey,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()..scale(-1.0, 1.0),
-            child: CameraPreview(_engine.controller!),
-          ),
-          if (_faceData != null)
-            LayoutBuilder(
-              builder: (_, box) => CustomPaint(
-                size: box.biggest,
-                painter: MehndiPainter(
-                  face: _faceData!.face,
-                  imageSize: _faceData!.imageSize,
-                  rotation: _faceData!.rotation,
-                  pattern: _hennaPatterns[_selectedPattern],
-                  intensity: _intensity,
-                ),
-              ),
-            ),
-          if (_faceData == null)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'Show your hand or face',
-                  style: TextStyle(color: Colors.white60),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Positioned(
-      top: 0, left: 0, right: 0,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.black.withOpacity(0.7), Colors.transparent],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-            child: Row(
+  Widget _buildImageDisplay() {
+    if (_isImageLoading) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          color: Colors.white.withOpacity(0.04),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _iconBtn(Icons.arrow_back_ios_rounded, () => Navigator.pop(context)),
-                const SizedBox(width: 10),
+                CircularProgressIndicator(color: Color(0xFFE28766), strokeWidth: 2.5),
+                SizedBox(height: 12),
                 Text(
-                  'Mehndi Try-On',
-                  style: GoogleFonts.cormorantGaramond(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                _iconBtn(Icons.photo_rounded, _uploadPhoto),
-                const SizedBox(width: 8),
-                _iconBtn(
-                  _capturing ? Icons.hourglass_top : Icons.camera_alt_rounded,
-                  _capture,
+                  'Loading image...',
+                  style: TextStyle(color: Colors.white54, fontSize: 13),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildControls() {
-    return Positioned(
-      bottom: 0, left: 0, right: 0,
-      child: Container(
-        color: const Color(0xFF1A0A00),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Pattern selector
-            SizedBox(
-              height: 80,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _hennaPatterns.length,
-                itemBuilder: (context, index) {
-                  final pattern = _hennaPatterns[index];
-                  final isSelected = _selectedPattern == index;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedPattern = index),
-                    child: Container(
-                      width: 80,
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isSelected 
-                            ? const Color(0xFF8B4513).withOpacity(0.2) 
-                            : Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFF8B4513) : Colors.white24,
-                        ),
-                      ),
+    // If image is selected and pattern is selected, show applied mehndi from assets
+    if (_selectedImage != null && _selectedPatternId != null) {
+      final pattern = MehndiPatterns.getById(_selectedPatternId!);
+      if (pattern != null) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: RepaintBoundary(
+            key: _repaintBoundaryKey,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Show the applied mehndi image from assets
+                Image.asset(
+                  pattern.assetPath,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.white.withOpacity(0.05),
+                    child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 35, 
-                            height: 35,
-                            decoration: BoxDecoration(
-                              color: pattern['color'],
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
+                          Icon(Icons.image_not_supported, size: 50, color: Colors.white24),
+                          const SizedBox(height: 8),
                           Text(
-                            pattern['name'],
-                            style: TextStyle(
-                              color: isSelected ? const Color(0xFF8B4513) : Colors.white70,
-                              fontSize: 9,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            'Design not available',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white38,
+                              fontSize: 13,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            // Intensity slider
-            Row(
-              children: [
-                const Icon(Icons.opacity, color: Color(0xFF8B4513)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Slider(
-                    value: _intensity,
-                    min: 0.3,
-                    max: 1.0,
-                    activeColor: const Color(0xFF8B4513),
-                    inactiveColor: Colors.white24,
-                    onChanged: (v) => setState(() => _intensity = v),
                   ),
                 ),
-                Text(
-                  '${(_intensity * 100).toInt()}%',
-                  style: const TextStyle(color: Colors.white70),
+                // Pattern name overlay at bottom
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE28766),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            pattern.category.toUpperCase(),
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            pattern.name,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.check_circle,
+                          color: const Color(0xFFE28766),
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
-            
-            // AI Apply button (for photo mode)
-            if (_photoMode && _uploadedImage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isProcessing ? null : _applyAIMehndi,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B4513),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isProcessing
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Apply AI Mehndi ✨',
-                            style: TextStyle(color: Colors.white),
-                          ),
+          ),
+        );
+      }
+    }
+
+    // Default: Show upload placeholder
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        color: Colors.white.withOpacity(0.04),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.brush, size: 50, color: Colors.white.withOpacity(0.15)),
+              const SizedBox(height: 12),
+              Text(
+                'Upload hand photo',
+                style: GoogleFonts.poppins(
+                  color: Colors.white30,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                'Then select a mehndi design',
+                style: GoogleFonts.poppins(
+                  color: Colors.white.withOpacity(0.15),
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.photo_library, size: 18),
+                label: const Text('Choose Image', style: TextStyle(fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE28766),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourceButton(bool isMobile) {
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: isMobile ? 10 : 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.photo_library, color: Colors.white54, size: 18),
+            const SizedBox(width: 6),
+            Text(
+              'Upload Hand Image',
+              style: GoogleFonts.poppins(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _iconBtn(IconData icon, VoidCallback fn) => GestureDetector(
-    onTap: fn,
-    child: Container(
-      width: 38, height: 38,
-      decoration: BoxDecoration(
-        color: Colors.black38, 
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(0.15))),
-      child: Icon(icon, color: Colors.white, size: 18),
-    ),
-  );
-}
-
-// =============================================================================
-// MEHNDI PAINTER
-// =============================================================================
-
-class MehndiPainter extends CustomPainter {
-  final Face face;
-  final Size imageSize;
-  final InputImageRotation rotation;
-  final Map<String, dynamic> pattern;
-  final double intensity;
-
-  const MehndiPainter({
-    required this.face,
-    required this.imageSize,
-    required this.rotation,
-    required this.pattern,
-    required this.intensity,
-  });
-
-  Offset _toCanvas(math.Point<int> pt, Size cs) {
-    double x = pt.x.toDouble(), y = pt.y.toDouble();
-    final iw = imageSize.width, ih = imageSize.height;
-    double rx, ry;
-    switch (rotation) {
-      case InputImageRotation.rotation0deg:   rx = x; ry = y;
-      case InputImageRotation.rotation90deg:  rx = ih - y; ry = x;
-      case InputImageRotation.rotation180deg: rx = iw - x; ry = ih - y;
-      case InputImageRotation.rotation270deg: rx = y; ry = iw - x;
-    }
-    final lw = (rotation == InputImageRotation.rotation90deg ||
-        rotation == InputImageRotation.rotation270deg) ? ih : iw;
-    final lh = (rotation == InputImageRotation.rotation90deg ||
-        rotation == InputImageRotation.rotation270deg) ? iw : ih;
-    return Offset(cs.width - rx / lw * cs.width, ry / lh * cs.height);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final facePoints = face.contours[FaceContourType.face]?.points ?? [];
-    if (facePoints.isEmpty) return;
-
-    final bounds = _bbox(facePoints.map((p) => _toCanvas(p, size)).toList());
-    final center = Offset(bounds.center.dx, bounds.top + bounds.height * 0.2);
-    final radius = bounds.width * 0.28;
-    final color = (pattern['color'] as Color).withOpacity(intensity);
-
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-
-    // Draw mandala-style henna pattern
-    for (int i = 0; i < 12; i++) {
-      final angle = i * 2 * math.pi / 12;
-      final point = Offset(
-        center.dx + math.cos(angle) * radius,
-        center.dy + math.sin(angle) * radius,
-      );
-      canvas.drawLine(center, point, paint);
-    }
-
-    // Circles
-    canvas.drawCircle(center, radius / 2, paint);
-    canvas.drawCircle(center, radius / 3, paint);
-
-    // Dots
-    final fillPaint = Paint()..color = color;
-    for (int i = 0; i < 24; i++) {
-      final angle = i * 2 * math.pi / 24;
-      final point = Offset(
-        center.dx + math.cos(angle) * (radius * 0.65),
-        center.dy + math.sin(angle) * (radius * 0.65),
-      );
-      canvas.drawCircle(point, 2, fillPaint);
-    }
-
-    // Forehead border
-    final foreheadPath = Path()
-      ..moveTo(bounds.left + bounds.width * 0.15, bounds.top + bounds.height * 0.05)
-      ..quadraticBezierTo(
-        bounds.center.dx, 
-        bounds.top - bounds.height * 0.02,
-        bounds.right - bounds.width * 0.15, 
-        bounds.top + bounds.height * 0.05
-      );
-    canvas.drawPath(foreheadPath, paint..strokeWidth = 2.0);
-
-    // Decorative side patterns
-    final leftSide = Path()
-      ..moveTo(bounds.left + bounds.width * 0.1, bounds.top + bounds.height * 0.2)
-      ..quadraticBezierTo(
-        bounds.left - bounds.width * 0.05,
-        bounds.top + bounds.height * 0.35,
-        bounds.left + bounds.width * 0.1,
-        bounds.top + bounds.height * 0.5,
-      );
-    canvas.drawPath(leftSide, paint..strokeWidth = 1.5);
-
-    final rightSide = Path()
-      ..moveTo(bounds.right - bounds.width * 0.1, bounds.top + bounds.height * 0.2)
-      ..quadraticBezierTo(
-        bounds.right + bounds.width * 0.05,
-        bounds.top + bounds.height * 0.35,
-        bounds.right - bounds.width * 0.1,
-        bounds.top + bounds.height * 0.5,
-      );
-    canvas.drawPath(rightSide, paint..strokeWidth = 1.5);
-
-    // Pattern-specific details
-    if (pattern['style'] == 'Traditional' || pattern['style'] == 'Pakistani') {
-      // Additional traditional elements
-      for (int i = 0; i < 6; i++) {
-        final angle = i * 2 * math.pi / 6 + math.pi / 6;
-        final petal = Offset(
-          center.dx + (radius * 0.45) * math.cos(angle),
-          center.dy + (radius * 0.45) * math.sin(angle),
-        );
-        canvas.drawCircle(petal, radius * 0.06, fillPaint);
-      }
-    }
-
-    if (pattern['style'] == 'Arabic') {
-      // Arabic-style floral elements
-      for (int i = 0; i < 8; i++) {
-        final angle = i * 2 * math.pi / 8;
-        final floral = Offset(
-          center.dx + (radius * 0.35) * math.cos(angle),
-          center.dy + (radius * 0.35) * math.sin(angle),
-        );
-        canvas.drawCircle(floral, radius * 0.04, fillPaint);
-        // Small petals
-        for (int j = 0; j < 3; j++) {
-          final a = angle + j * 2 * math.pi / 3;
-          canvas.drawCircle(
-            Offset(
-              floral.dx + radius * 0.06 * math.cos(a),
-              floral.dy + radius * 0.06 * math.sin(a),
+  Widget _buildPatternSelection(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.grid_view, color: const Color(0xFFE28766), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Select Mehndi Design',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            radius * 0.02,
-            fillPaint,
-          );
-        }
-      }
-    }
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Fixed overflow by reducing height
+        SizedBox(
+          height: 70, // Reduced from 85 to 70 to fix overflow
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _patternIds.length,
+            itemBuilder: (context, index) {
+              final patternId = _patternIds[index];
+              final pattern = MehndiPatterns.getById(patternId);
+              if (pattern == null) return const SizedBox();
+              
+              final isSelected = _selectedPatternId == patternId;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedPatternId = patternId),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 70,
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFFE28766).withOpacity(0.15)
+                        : Colors.white.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFFE28766) : Colors.white.withOpacity(0.08),
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFE28766).withOpacity(0.2),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            )
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        pattern.icon,
+                        style: const TextStyle(fontSize: 22),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        pattern.name,
+                        style: GoogleFonts.poppins(
+                          color: isSelected ? Colors.white : Colors.white60,
+                          fontSize: 7,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (isSelected)
+                        Container(
+                          margin: const EdgeInsets.only(top: 1),
+                          width: 12,
+                          height: 2,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE28766),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
-  Rect _bbox(List<Offset> pts) {
-    if (pts.isEmpty) return Rect.zero;
-    double x0 = double.infinity, y0 = double.infinity;
-    double x1 = double.negativeInfinity, y1 = double.negativeInfinity;
-    for (final p in pts) {
-      if (p.dx < x0) x0 = p.dx; if (p.dy < y0) y0 = p.dy;
-      if (p.dx > x1) x1 = p.dx; if (p.dy > y1) y1 = p.dy;
-    }
-    return Rect.fromLTRB(x0, y0, x1, y1);
+  Widget _buildHistoryTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.history,
+            size: 60,
+            color: Colors.white.withOpacity(0.1),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'History Coming Soon',
+            style: GoogleFonts.poppins(
+              color: Colors.white30,
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Saved designs will appear here',
+            style: GoogleFonts.poppins(
+              color: Colors.white.withOpacity(0.2),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant MehndiPainter old) => true;
 }

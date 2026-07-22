@@ -2,56 +2,80 @@
 import 'package:flutter/material.dart';
 
 class MakeupConfiguration {
+  // Lipstick
   Color lipstickColor;
   double lipstickOpacity;
-  bool lipstickEnabled;
-
-  Color eyeshadowColor;
-  double eyeshadowOpacity;
-  bool eyeshadowEnabled;
-
-  Color eyelinerColor;
-  double eyelinerOpacity;
-  bool eyelinerEnabled;
-
+  
+  // Foundation
+  Color foundationColor;
+  double foundationOpacity;
+  
+  // Blush
   Color blushColor;
   double blushOpacity;
-  bool blushEnabled;
-
-  Color contourColor;
-  double contourOpacity;
-  bool contourEnabled;
-
-  Color jewelryColor;
-  double jewelryOpacity;
-  bool jewelryEnabled;
-
-  Color mehndiColor;
-  double mehndiOpacity;
-  bool mehndiEnabled;
+  
+  // Eyeshadow
+  Color eyeshadowColor;
+  double eyeshadowOpacity;
+  
+  // Eyeliner
+  Color eyelinerColor;
+  double eyelinerOpacity;
+  
+  // Eyebrows
+  Color eyebrowColor;
+  double eyebrowOpacity;
+  
+  // Highlighter
+  Color highlighterColor;
+  double highlighterOpacity;
+  
+  // Bronzer
+  Color bronzerColor;
+  double bronzerOpacity;
+  
+  // Intensity multipliers
+  double intensity;
 
   MakeupConfiguration({
     this.lipstickColor = Colors.transparent,
-    this.lipstickOpacity = 0.5,
-    this.lipstickEnabled = true,
-    this.eyeshadowColor = Colors.transparent,
-    this.eyeshadowOpacity = 0.4,
-    this.eyeshadowEnabled = false,
-    this.eyelinerColor = Colors.transparent,
-    this.eyelinerOpacity = 0.8,
-    this.eyelinerEnabled = false,
+    this.lipstickOpacity = 0.8,
+    this.foundationColor = Colors.transparent,
+    this.foundationOpacity = 0.35,
     this.blushColor = Colors.transparent,
     this.blushOpacity = 0.3,
-    this.blushEnabled = true,
-    this.contourColor = Colors.transparent,
-    this.contourOpacity = 0.3,
-    this.contourEnabled = false,
-    this.jewelryColor = Colors.transparent,
-    this.jewelryOpacity = 1.0,
-    this.jewelryEnabled = false,
-    this.mehndiColor = Colors.transparent,
-    this.mehndiOpacity = 0.85,
-    this.mehndiEnabled = false,
+    this.eyeshadowColor = Colors.transparent,
+    this.eyeshadowOpacity = 0.5,
+    this.eyelinerColor = Colors.transparent,
+    this.eyelinerOpacity = 0.9,
+    this.eyebrowColor = Colors.transparent,
+    this.eyebrowOpacity = 0.5,
+    this.highlighterColor = Colors.transparent,
+    this.highlighterOpacity = 0.4,
+    this.bronzerColor = Colors.transparent,
+    this.bronzerOpacity = 0.3,
+    this.intensity = 0.5,
   });
-}
 
+  Map<String, dynamic> toJson() {
+    return {
+      'lipstick': lipstickColor.value,
+      'lipstickOpacity': lipstickOpacity,
+      'foundation': foundationColor.value,
+      'foundationOpacity': foundationOpacity,
+      'blush': blushColor.value,
+      'blushOpacity': blushOpacity,
+      'eyeshadow': eyeshadowColor.value,
+      'eyeshadowOpacity': eyeshadowOpacity,
+      'eyeliner': eyelinerColor.value,
+      'eyelinerOpacity': eyelinerOpacity,
+      'eyebrow': eyebrowColor.value,
+      'eyebrowOpacity': eyebrowOpacity,
+      'highlighter': highlighterColor.value,
+      'highlighterOpacity': highlighterOpacity,
+      'bronzer': bronzerColor.value,
+      'bronzerOpacity': bronzerOpacity,
+      'intensity': intensity,
+    };
+  }
+}

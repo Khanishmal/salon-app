@@ -1,4 +1,3 @@
-// lib/screens/vendor/add_product_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -6,17 +5,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../utils/product_image_helper.dart';
 
 class AddProductScreen extends StatefulWidget {
   final String vendorId;
   final String? productId;
   final Map<String, dynamic>? productData;
+  final bool isDeal;
 
   const AddProductScreen({
     super.key,
     required this.vendorId,
     this.productId,
     this.productData,
+    this.isDeal = false,
   });
 
   @override
@@ -31,31 +33,45 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _categoryController = TextEditingController();
   final _stockController = TextEditingController();
   final _brandController = TextEditingController();
+  final _discountController = TextEditingController();
+  final _dealPriceController = TextEditingController();
   
   File? _imageFile;
   bool _isUploading = false;
   String? _imageUrl;
   bool _isEditing = false;
   bool _isImagePicking = false;
+  bool _isDeal = false;
+  bool _useDefaultImage = true;
+  String? _selectedCategory;
   
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
 
+  // All categories including Makeup Deals
   final List<String> _categories = [
     'Lipsticks',
     'Foundations',
     'Eyeliners',
+    'Eyeshadow',
+    'Blush',
+    'Bronzer',
+    'Highlighter',
+    'Eyebrow',
     'Jewellery',
     'Hair Accessories',
     'Mehndi Templates',
+    'Makeup Deals',  // Added Makeup Deals category
     'Other',
   ];
 
   @override
   void initState() {
     super.initState();
+    _isDeal = widget.isDeal;
     _isEditing = widget.productId != null && widget.productData != null;
+    
     if (_isEditing && widget.productData != null) {
       _nameController.text = widget.productData!['name'] ?? '';
       _priceController.text = widget.productData!['price']?.toString() ?? '';
@@ -63,7 +79,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
       _categoryController.text = widget.productData!['category'] ?? '';
       _stockController.text = widget.productData!['stock']?.toString() ?? '';
       _brandController.text = widget.productData!['brand'] ?? '';
+      _discountController.text = widget.productData!['discount']?.toString() ?? '';
+      _dealPriceController.text = widget.productData!['dealPrice']?.toString() ?? '';
       _imageUrl = widget.productData!['imageUrl'];
+      _useDefaultImage = widget.productData!['useDefaultImage'] ?? true;
+      _selectedCategory = widget.productData!['category'];
     }
   }
 
@@ -75,6 +95,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
     _categoryController.dispose();
     _stockController.dispose();
     _brandController.dispose();
+    _discountController.dispose();
+    _dealPriceController.dispose();
     super.dispose();
   }
 
@@ -166,6 +188,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         setState(() {
           _imageFile = File(image.path);
           _imageUrl = null;
+          _useDefaultImage = false;
         });
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -188,83 +211,80 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  // lib/screens/vendor/add_product_screen.dart - Updated _uploadImage method
-
-Future<String?> _uploadImage() async {
-  if (_imageFile == null) return _imageUrl;
-  
-  setState(() {
-    _isUploading = true;
-  });
-
-  try {
-    // Create a unique filename with proper path
-    String fileName = 'products/${widget.vendorId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-    Reference ref = _storage.ref().child(fileName);
-    
-    // Upload with proper metadata
-    UploadTask uploadTask = ref.putFile(
-      _imageFile!,
-      SettableMetadata(
-        contentType: 'image/jpeg',
-        customMetadata: {
-          'vendorId': widget.vendorId,
-          'uploadedAt': DateTime.now().toIso8601String(),
-        },
-      ),
-    );
-    
-    // Wait for upload to complete with error handling
-    TaskSnapshot snapshot = await uploadTask.whenComplete(() => {});
-    
-    // Get download URL
-    String downloadUrl = await snapshot.ref.getDownloadURL();
+  Future<String?> _uploadImage() async {
+    if (_imageFile == null) return _imageUrl;
     
     setState(() {
-      _imageUrl = downloadUrl;
-      _isUploading = false;
+      _isUploading = true;
     });
-    
-    return downloadUrl;
-  } on FirebaseException catch (e) {
-    print('Firebase Storage Error: ${e.code} - ${e.message}');
-    setState(() {
-      _isUploading = false;
-    });
-    
-    String errorMessage = 'Error uploading image: ';
-    if (e.code == 'storage/object-not-found') {
-      errorMessage += 'Storage path not found. Please check Firebase Storage rules.';
-    } else if (e.code == 'storage/unauthorized') {
-      errorMessage += 'You are not authorized to upload. Please check security rules.';
-    } else if (e.code == 'storage/canceled') {
-      errorMessage += 'Upload was canceled.';
-    } else {
-      errorMessage += e.message ?? 'Unknown error occurred.';
+
+    try {
+      String fileName = 'products/${widget.vendorId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      Reference ref = _storage.ref().child(fileName);
+      
+      UploadTask uploadTask = ref.putFile(
+        _imageFile!,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'vendorId': widget.vendorId,
+            'uploadedAt': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
+      
+      TaskSnapshot snapshot = await uploadTask.whenComplete(() => {});
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+      
+      setState(() {
+        _imageUrl = downloadUrl;
+        _isUploading = false;
+      });
+      
+      return downloadUrl;
+    } on FirebaseException catch (e) {
+      print('Firebase Storage Error: ${e.code} - ${e.message}');
+      setState(() {
+        _isUploading = false;
+      });
+      
+      String errorMessage = 'Error uploading image: ';
+      if (e.code == 'storage/object-not-found') {
+        errorMessage += 'Storage path not found. Please check Firebase Storage rules.';
+      } else if (e.code == 'storage/unauthorized') {
+        errorMessage += 'You are not authorized to upload. Please check security rules.';
+      } else if (e.code == 'storage/canceled') {
+        errorMessage += 'Upload was canceled.';
+      } else {
+        errorMessage += e.message ?? 'Unknown error occurred.';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return null;
+    } catch (e) {
+      print('Upload error: $e');
+      setState(() {
+        _isUploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading image: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return null;
     }
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(errorMessage),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 4),
-      ),
-    );
-    return null;
-  } catch (e) {
-    print('Upload error: $e');
-    setState(() {
-      _isUploading = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error uploading image: ${e.toString()}'),
-        backgroundColor: Colors.red,
-      ),
-    );
-    return null;
   }
-}
+
+  String _getDefaultImageForCategory(String category) {
+    return ProductImageHelper.getImageForCategory(category);
+  }
 
   Future<void> _saveProduct() async {
     if (_formKey.currentState!.validate()) {
@@ -283,17 +303,35 @@ Future<String?> _uploadImage() async {
           }
         }
 
+        String category = _categoryController.text.trim();
+        
+        // If no custom image uploaded, use default category image
+        if (imageUrl == null || imageUrl.isEmpty) {
+          imageUrl = _getDefaultImageForCategory(category);
+          _useDefaultImage = true;
+        }
+
         final Map<String, dynamic> productData = {
           'vendorId': widget.vendorId,
           'name': _nameController.text.trim(),
           'price': double.parse(_priceController.text.trim()),
           'description': _descriptionController.text.trim(),
-          'category': _categoryController.text.trim(),
+          'category': category,
           'stock': int.parse(_stockController.text.trim().isEmpty ? '0' : _stockController.text.trim()),
           'brand': _brandController.text.trim(),
-          'imageUrl': imageUrl ?? '',
+          'imageUrl': imageUrl,
+          'useDefaultImage': _useDefaultImage,
+          'isDeal': _isDeal || category == 'Makeup Deals', // Auto-mark as deal if category is Makeup Deals
           'updatedAt': FieldValue.serverTimestamp(),
         };
+
+        // Add deal-specific fields if it's a deal
+        if (_isDeal || category == 'Makeup Deals') {
+          productData['discount'] = double.tryParse(_discountController.text.trim()) ?? 0.0;
+          productData['dealPrice'] = double.tryParse(_dealPriceController.text.trim()) ?? 
+              double.parse(_priceController.text.trim());
+          productData['originalPrice'] = double.parse(_priceController.text.trim());
+        }
 
         if (_isEditing && widget.productId != null) {
           await _firestore.collection('products').doc(widget.productId).update(productData);
@@ -301,6 +339,8 @@ Future<String?> _uploadImage() async {
           productData['createdAt'] = FieldValue.serverTimestamp();
           productData['isActive'] = true;
           productData['salesCount'] = 0;
+          productData['rating'] = 0.0;
+          productData['reviewCount'] = 0;
           await _firestore.collection('products').add(productData);
         }
 
@@ -327,10 +367,16 @@ Future<String?> _uploadImage() async {
 
   @override
   Widget build(BuildContext context) {
+    // Check if selected category is Makeup Deals
+    bool isDealCategory = _categoryController.text.trim() == 'Makeup Deals';
+    bool showDealFields = _isDeal || isDealCategory;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _isEditing ? 'Edit Product' : 'Add New Product',
+          _isEditing 
+            ? (showDealFields ? 'Edit Deal' : 'Edit Product')
+            : (showDealFields ? 'Add New Deal' : 'Add New Product'),
           style: const TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFFF2845C),
@@ -365,14 +411,14 @@ Future<String?> _uploadImage() async {
                             image: FileImage(_imageFile!),
                             fit: BoxFit.cover,
                           )
-                        : (_imageUrl != null && _imageUrl!.isNotEmpty
+                        : (_imageUrl != null && _imageUrl!.isNotEmpty && !_useDefaultImage
                             ? DecorationImage(
                                 image: NetworkImage(_imageUrl!),
                                 fit: BoxFit.cover,
                               )
                             : null),
                   ),
-                  child: (_imageFile == null && (_imageUrl == null || _imageUrl!.isEmpty))
+                  child: (_imageFile == null && (_imageUrl == null || _imageUrl!.isEmpty || _useDefaultImage))
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -397,6 +443,18 @@ Future<String?> _uploadImage() async {
                                 color: _isImagePicking ? const Color(0xFFF2845C) : Colors.grey.shade600,
                               ),
                             ),
+                            if (_useDefaultImage && _imageUrl != null && _imageUrl!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Using default category image',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade500,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
                           ],
                         )
                       : Stack(
@@ -425,6 +483,7 @@ Future<String?> _uploadImage() async {
                                         setState(() {
                                           _imageFile = null;
                                           _imageUrl = null;
+                                          _useDefaultImage = true;
                                         });
                                       },
                                       padding: EdgeInsets.zero,
@@ -455,8 +514,8 @@ Future<String?> _uploadImage() async {
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'Product Name *',
-                  hintText: 'e.g., Matte Lipstick',
+                  labelText: showDealFields ? 'Deal Name *' : 'Product Name *',
+                  hintText: showDealFields ? 'e.g., Summer Makeup Kit' : 'e.g., Matte Lipstick',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -475,7 +534,7 @@ Future<String?> _uploadImage() async {
               TextFormField(
                 controller: _priceController,
                 decoration: InputDecoration(
-                  labelText: 'Price (Rs) *',
+                  labelText: showDealFields ? 'Original Price (Rs) *' : 'Price (Rs) *',
                   hintText: 'e.g., 1200',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -495,9 +554,48 @@ Future<String?> _uploadImage() async {
               ),
               const SizedBox(height: 15),
 
-              // Category Dropdown
+              // Deal-specific fields (shown when isDeal is true OR category is Makeup Deals)
+              if (showDealFields) ...[
+                TextFormField(
+                  controller: _discountController,
+                  decoration: InputDecoration(
+                    labelText: 'Discount (%)',
+                    hintText: 'e.g., 20',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.local_offer),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 15),
+                TextFormField(
+                  controller: _dealPriceController,
+                  decoration: InputDecoration(
+                    labelText: 'Deal Price (Rs) *',
+                    hintText: 'e.g., 960',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.attach_money),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter deal price';
+                    }
+                    if (double.tryParse(value) == null) {
+                      return 'Please enter a valid number';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 15),
+              ],
+
+              // Category Dropdown - Now includes Makeup Deals
               DropdownButtonFormField<String>(
-                value: _categoryController.text.isNotEmpty ? _categoryController.text : null,
+                value: _selectedCategory,
                 decoration: InputDecoration(
                   labelText: 'Category *',
                   hintText: 'Select category',
@@ -509,12 +607,48 @@ Future<String?> _uploadImage() async {
                 items: _categories.map((category) {
                   return DropdownMenuItem<String>(
                     value: category,
-                    child: Text(category),
+                    child: Row(
+                      children: [
+                        Image.asset(
+                          ProductImageHelper.getImageForCategory(category),
+                          height: 24,
+                          width: 24,
+                          errorBuilder: (context, error, stackTrace) => 
+                            const Icon(Icons.image, size: 24),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(category),
+                        if (category == 'Makeup Deals')
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF6B6B), Color(0xFFFF4757)],
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'DEAL',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   );
                 }).toList(),
                 onChanged: (value) {
                   setState(() {
+                    _selectedCategory = value;
                     _categoryController.text = value ?? '';
+                    // Auto-assign default image when category changes
+                    if (_useDefaultImage && value != null) {
+                      _imageUrl = _getDefaultImageForCategory(value);
+                    }
                   });
                 },
                 validator: (value) {
@@ -540,16 +674,18 @@ Future<String?> _uploadImage() async {
               ),
               const SizedBox(height: 15),
 
-              // Description
+              // Description (Optional)
               TextFormField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
-                  labelText: 'Description',
+                  labelText: 'Description (Optional)',
                   hintText: 'Enter product details...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: const Icon(Icons.description),
+                  helperText: 'Provide additional details about the product',
+                  helperStyle: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 maxLines: 3,
               ),
@@ -592,7 +728,9 @@ Future<String?> _uploadImage() async {
                           ),
                         )
                       : Text(
-                          _isEditing ? 'Update Product' : 'Add Product',
+                          _isEditing 
+                            ? (showDealFields ? 'Update Deal' : 'Update Product')
+                            : (showDealFields ? 'Add Deal' : 'Add Product'),
                           style: const TextStyle(fontSize: 16, color: Colors.white),
                         ),
                 ),
